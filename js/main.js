@@ -36,9 +36,9 @@ const deptToDay = {
     'AIML': { day: 2, name: 'Tuesday' },
     'COMP': { day: 3, name: 'Wednesday' },
     'IT': { day: 4, name: 'Thursday' },
-    'MECH': { day: 6, name: 'Saturday' },
-    'CIVIL': { day: 6, name: 'Saturday' },
-    'AUTOMOBILE': { day: 6, name: 'Saturday' }
+    'MECH': { day: 0, name: 'Sunday' },
+    'CIVIL': { day: 0, name: 'Sunday' },
+    'AUTOMOBILE': { day: 0, name: 'Sunday' }
 };
 
 // ==================== HELPER FUNCTIONS ====================

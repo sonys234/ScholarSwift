@@ -36,9 +36,9 @@ const deptToDay = {
     'AIML': { day: 2, name: 'Tuesday' },
     'COMP': { day: 3, name: 'Wednesday' },
     'IT': { day: 4, name: 'Thursday' },
-    'MECH': { day: 0, name: 'Sunday' },
-    'CIVIL': { day: 0, name: 'Sunday' },
-    'AUTOMOBILE': { day: 0, name: 'Sunday' }
+    'MECH': { day: 6, name: 'Saturday' },      // Changed to 6
+    'CIVIL': { day: 6, name: 'Saturday' },     // Changed to 6
+    'AUTOMOBILE': { day: 6, name: 'Saturday' } // Changed to 6
 };
 
 // ==================== HELPER FUNCTIONS ====================
@@ -72,10 +72,12 @@ function safeAddMinutes(timeStr, minsToAdd) {
 function getSlotTokenNumber(selectedTimeStr) {
     let time = new Date();
     time.setHours(9, 30, 0, 0); 
-    const bookingEnd = 21; 
+    const bookingEnd = 23; // FIX: Use 23 (11 PM) to prevent rollover loops
     let tokenIndex = 1;
+    let safetyCounter = 0; // FIX: Prevents infinite loops
 
-    while (time.getHours() < bookingEnd) {
+    while (time.getHours() < bookingEnd && safetyCounter < 200) {
+        safetyCounter++;
         if (time.getHours() === 13) { time.setHours(14, 0, 0, 0); continue; }
         const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
         if (timeStr === selectedTimeStr) return tokenIndex;
@@ -1258,12 +1260,11 @@ function restrictDateToDepartmentDay() {
     let checkDate = new Date(today);
     let safetyCounter = 0; 
 
-    // LIMIT TO EXACTLY 3 DATES
     while (found < 3 && safetyCounter < 50) {
         safetyCounter++;
         if (checkDate.getDay() === deptInfo.day) {
             const isToday = checkDate.toDateString() === today.toDateString();
-            if (!isToday || currentHour < 21) {
+            if (!isToday || currentHour < 23) { // FIX: Changed to 23
                 const dateString = checkDate.toISOString().split('T')[0];
                 const readableDate = checkDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
                 const option = document.createElement('option');
@@ -1310,9 +1311,11 @@ async function generateAvailableTimeSlots(selectedDate) {
         select.innerHTML = '<option value="">Select a 7-min slot</option>';
         let time = new Date();
         time.setHours(9, 30, 0, 0); 
-        const bookingEnd = 21; 
+        const bookingEnd = 23; // FIX: Use 23 (11 PM)
+        let safetyCounter = 0; // FIX: Prevents infinite loops
 
-        while (time.getHours() < bookingEnd) {
+        while (time.getHours() < bookingEnd && safetyCounter < 200) {
+            safetyCounter++;
             if (time.getHours() === 13) { time.setHours(14, 0, 0, 0); continue; }
             const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
             let endTime = new Date(time);

@@ -1433,7 +1433,8 @@ function downloadCSV() {
     const data = window.currentFilteredData || [];
     if (data.length === 0) return showToast("No data to export!");
 
-    let csvContent = "Date,Time,Token,Student Name,Email,Contact No,GR Number,Department,Joining Year,Current Year,MahaDBT ID,Category,Status\n";
+    // Added the new "Pending Documents" column to the CSV Header!
+    let csvContent = "Date,Time,Token,Student Name,Email,Contact No,GR Number,Department,Joining Year,Current Year,MahaDBT ID,Category,Status,Pending Documents\n";
 
     data.forEach(app => {
         const date = app.date || "";
@@ -1450,7 +1451,23 @@ function downloadCSV() {
         const cat = app.scholarshipType || "";
         const stat = (app.status || "").replace('_closed', '').toUpperCase();
 
-        csvContent += `${date},${time},${token},${name},${email},${phone},${gr},${dept},${joinYr},${currYr},${dbt},${cat},${stat}\n`;
+        // NEW: Calculate missing documents if the status is pending
+        let pendingDocsStr = "";
+        const baseStatus = (app.status || "").replace('_closed', '');
+        
+        if (baseStatus === 'pending') {
+            const req = scholarshipDocs[app.scholarshipType] || [];
+            const ver = app.documentVerification || {};
+            const missing = req.filter(d => !ver[d]);
+            
+            // Wrap the list in double quotes so Excel keeps it inside a single cell
+            if (missing.length > 0) {
+                pendingDocsStr = `"${missing.join(', ')}"`; 
+            }
+        }
+
+        // Add the new pendingDocsStr to the end of the row
+        csvContent += `${date},${time},${token},${name},${email},${phone},${gr},${dept},${joinYr},${currYr},${dbt},${cat},${stat},${pendingDocsStr}\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -1543,28 +1560,43 @@ async function generateAvailableTimeSlots(selectedDate) {
         select.innerHTML = '<option value="">Select a 7-min slot</option>';
         let time = new Date();
         time.setHours(9, 30, 0, 0); 
-        const bookingEnd = 23; 
+        const bookingEnd = 23; // RESTORED TO 11:00 PM FOR TESTING!
         let safetyCounter = 0; 
+        
+        // Get current exact time and parse the selected date safely
+        const now = new Date();
+        const [selYear, selMonth, selDay] = selectedDate.split('-').map(Number);
 
         while (time.getHours() < bookingEnd && safetyCounter < 200) {
             safetyCounter++;
             if (time.getHours() === 13) { time.setHours(14, 0, 0, 0); continue; }
             const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-            let endTime = new Date(time);
-            endTime.setMinutes(endTime.getMinutes() + 7);
-            if (endTime.getHours() >= bookingEnd && endTime.getMinutes() > 0) break; 
+            
+            // Calculate the exact timestamp for THIS specific slot to check if it has passed
+            const slotDateTime = new Date(selYear, selMonth - 1, selDay, time.getHours(), time.getMinutes(), 0, 0);
             
             const isBooked = bookedTimes.includes(timeStr);
+            const isPast = slotDateTime < now; // Check if slot is in the past
+
             const option = document.createElement('option');
             option.value = timeStr;
+            
             if (isBooked) {
                 option.textContent = `${timeStr} (BOOKED)`;
                 option.disabled = true;
                 option.className = "text-slate-300 bg-slate-50 italic";
+            } else if (isPast) {
+                // Grey out and disable passed time slots
+                option.textContent = `${timeStr} (PASSED)`;
+                option.disabled = true;
+                option.className = "text-slate-300 bg-slate-50 italic opacity-60";
             } else {
                 option.textContent = timeStr;
             }
+            
             select.appendChild(option);
+            
+            // Advance clock by 7 minutes for the next loop
             time.setMinutes(time.getMinutes() + 7); 
         }
     } catch (error) { showToast("Error checking availability."); }

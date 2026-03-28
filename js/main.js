@@ -766,7 +766,6 @@ async function confirmCancelBooking() {
     }
 }
 
-// ==================== ADMIN DASHBOARD ====================
 function showAdminDashboard() {
     document.getElementById('authPage').classList.add('hidden');
     document.getElementById('adminDashboard').classList.remove('hidden');
@@ -777,11 +776,12 @@ function showAdminDashboard() {
 
     const todayStr = new Date().toISOString().split('T')[0];
 
+    // 1. Separate Render Function for Clock-Driven UI updates
     window.renderAdminQueueTable = function () {
         const tbody = document.getElementById('queueTableBody');
         if (!tbody || !window.currentAdminQueueList) return;
 
-        let masterDelay = getMasterDelay(); // Uses the exact same math as the student view!
+        let masterDelay = getMasterDelay();
         let newHtml = '';
 
         window.currentAdminQueueList.forEach(data => {
@@ -854,6 +854,7 @@ function showAdminDashboard() {
         tbody.innerHTML = newHtml;
     };
 
+    // 2. Fetch data from DB, save it globally, and trigger first render
     if (window.adminQueueSnapshotObj) window.adminQueueSnapshotObj();
 
     window.adminQueueSnapshotObj = db.collection('appointments').where('date', '==', todayStr)
@@ -867,13 +868,19 @@ function showAdminDashboard() {
             refreshActiveStudentDisplay();
         });
 
-    // FIX: Ticks every 1 SECOND (1000ms) to perfectly match the student's dashboard
+    // 3. UI Auto-Update Loop: Force re-render EVERY 1 SECOND to perfectly match student view
     if (window.adminTableUpdateInterval) clearInterval(window.adminTableUpdateInterval);
     window.adminTableUpdateInterval = setInterval(() => {
         if (!isQueuePaused && window.renderAdminQueueTable) {
             window.renderAdminQueueTable();
         }
     }, 1000);
+
+    // 4. CLEANUP: Ensure any old Auto-Call intervals are permanently killed
+    if (window.adminAutoCallInterval) {
+        clearInterval(window.adminAutoCallInterval);
+        window.adminAutoCallInterval = null;
+    }
 }
 function toggleAdminView(view) {
     const liveView = document.getElementById('adminLiveQueueView');

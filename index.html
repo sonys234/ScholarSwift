@@ -1,81 +1,108 @@
 <!doctype html>
 <html lang="en" class="h-full">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ScholarSwift</title>
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="sdk/data_sdk.js"></script>
     <script src="sdk/element_sdk.js"></script>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
-    
-    <style>@view-transition { navigation: auto; }</style>
+
+    <style>
+        @view-transition {
+            navigation: auto;
+        }
+    </style>
 </head>
+
 <body class="h-full">
     <div id="app" class="h-full w-full gradient-bg overflow-auto">
         <div id="authPage" class="min-h-full flex items-center justify-center p-6">
             <div class="w-full max-w-md">
                 <div class="text-center mb-8 animate-slide">
                     <div class="inline-flex items-center gap-3 mb-4">
-                        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg">
+                        <div
+                            class="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg">
                             <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
                         </div>
                         <h1 id="appTitle" class="text-3xl font-bold text-white">ScholarSwift</h1>
                     </div>
                     <p id="appTagline" class="text-slate-300">Smart Queue Management System</p>
                 </div>
-                
+
                 <div class="flex mb-6 bg-slate-800/50 rounded-xl p-1.5">
-                    <button id="studentToggle" onclick="setUserType('student')" class="flex-1 py-3 px-4 rounded-lg font-semibold transition-all duration-300 bg-emerald-500 text-white"> Student </button>
-                    <button id="adminToggle" onclick="setUserType('admin')" class="flex-1 py-3 px-4 rounded-lg font-semibold transition-all duration-300 text-slate-400 hover:text-white"> Admin </button>
+                    <button id="studentToggle" onclick="setUserType('student')"
+                        class="flex-1 py-3 px-4 rounded-lg font-semibold transition-all duration-300 bg-emerald-500 text-white">
+                        Student </button>
+                    <button id="adminToggle" onclick="setUserType('admin')"
+                        class="flex-1 py-3 px-4 rounded-lg font-semibold transition-all duration-300 text-slate-400 hover:text-white">
+                        Admin </button>
                 </div>
-                
+
                 <div class="glass-card rounded-2xl p-8 shadow-2xl animate-slide" style="animation-delay: 0.1s">
-                    <div class="flex mb-6 bg-slate-100 rounded-lg p-1">
-                        <button id="loginTab" onclick="setAuthMode('login')" class="flex-1 py-2.5 rounded-md font-medium transition-all bg-white shadow text-slate-800"> Sign In </button>
-                        <button id="signupTab" onclick="setAuthMode('signup')" class="flex-1 py-2.5 rounded-md font-medium transition-all text-slate-500"> Sign Up </button>
+                    <h2 id="authTitle" class="text-xl font-bold text-slate-800 mb-6 text-center">
+                        Sign In
+                    </h2>
+                    <div id="authTabs" class="flex mb-6 bg-slate-100 rounded-lg p-1">
+                        <button id="loginTab" onclick="setAuthMode('login')"
+                            class="flex-1 py-2.5 rounded-md font-medium transition-all bg-white shadow text-slate-800">
+                            Sign In </button>
+                        <button id="signupTab" onclick="setAuthMode('signup')"
+                            class="flex-1 py-2.5 rounded-md font-medium transition-all text-slate-500"> Sign Up
+                        </button>
                     </div>
-                    
+
                     <form id="authForm" onsubmit="handleAuth(event)">
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
-                            <input type="email" id="emailInput" placeholder="yourname@college.edu" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
+                            <input type="email" id="emailInput" placeholder="yourname@college.edu" required
+                                class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
                         </div>
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-slate-700 mb-2">Password</label>
-                            <input type="password" id="passwordInput" placeholder="••••••••" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
+                            <input type="password" id="passwordInput" placeholder="••••••••" required
+                                class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
                         </div>
 
                         <div id="signupExtraFields" class="hidden space-y-4 mb-4">
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-2">First Name</label>
-                                    <input type="text" id="firstNameInput" placeholder="First" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
+                                    <input type="text" id="firstNameInput" placeholder="First"
+                                        class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-2">Last Name</label>
-                                    <input type="text" id="lastNameInput" placeholder="Last" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
+                                    <input type="text" id="lastNameInput" placeholder="Last"
+                                        class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-2">Contact No.</label>
-                                    <input type="tel" id="contactInput" placeholder="10-digit number" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
+                                    <input type="tel" id="contactInput" placeholder="10-digit number"
+                                        class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-2">GR Number</label>
-                                    <input type="text" id="grNumberInput" placeholder="e.g. S2328077" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none uppercase transition-all">
+                                    <input type="text" id="grNumberInput" placeholder="e.g. S2328077"
+                                        class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none uppercase transition-all">
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-2">Department</label>
-                                    <select id="deptSelect" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all bg-white">
+                                    <select id="deptSelect"
+                                        class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all bg-white">
                                         <option value="">Select Dept</option>
                                         <option value="COMP">Computer (COMP)</option>
                                         <option value="IT">IT</option>
@@ -88,7 +115,8 @@
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-2">Joining Year</label>
-                                    <select id="joiningYearInput" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all bg-white">
+                                    <select id="joiningYearInput"
+                                        class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all bg-white">
                                         <option value="">Select Year</option>
                                         <option value="2022">2022</option>
                                         <option value="2023">2023</option>
@@ -99,7 +127,8 @@
                             </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium text-slate-700 mb-2">Current Year</label>
-                                <select id="currentYearInput" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all bg-white">
+                                <select id="currentYearInput"
+                                    class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all bg-white">
                                     <option value="">Select Year</option>
                                     <option value="1">1st Year (FE)</option>
                                     <option value="2">2nd Year (SE)</option>
@@ -109,7 +138,8 @@
                             </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium text-slate-700 mb-2">Scholarship Type</label>
-                                <select id="scholarshipTypeInput" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all bg-white">
+                                <select id="scholarshipTypeInput"
+                                    class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all bg-white">
                                     <option value="">Select Category</option>
                                     <option value="EBC">EBC</option>
                                     <option value="OBC">OBC</option>
@@ -117,27 +147,36 @@
                                     <option value="ST">ST</option>
                                     <option value="VJNT">VJNT</option>
                                     <option value="EWS">EWS</option>
+                                    <option value="Minority">Minority</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-2">MahaDBT App ID</label>
-                                <input type="text" id="mahadbtIdInput" placeholder="Application ID" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
+                                <input type="text" id="mahadbtIdInput" placeholder="Application ID"
+                                    class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
                             </div>
                         </div>
-                        
-                        <div id="authError" class="mb-4 hidden p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm"></div>
-                        <button type="submit" id="authSubmit" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-xl shadow-lg transition-all"> Sign In </button>
+
+                        <div id="authError"
+                            class="mb-4 hidden p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+                        </div>
+                        <button type="submit" id="authSubmit"
+                            class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-xl shadow-lg transition-all">
+                            Sign In </button>
                     </form>
                 </div>
             </div>
         </div>
-        
+
         <div id="studentDashboard" class="hidden min-h-full">
             <header class="bg-slate-900/80 backdrop-blur-lg border-b border-slate-700 sticky top-0 z-50">
                 <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        <div
+                            class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
                         </div>
                         <span class="text-xl font-bold text-white">ScholarSwift</span>
                     </div>
@@ -146,16 +185,25 @@
                             <p id="studentName" class="text-white font-medium">--</p>
                             <p id="studentKey" class="text-sm text-emerald-400 font-mono font-bold">--</p>
                         </div>
-                        
+
                         <div class="relative">
-                            <button onclick="toggleNotifications()" class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-all relative">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                                <span id="notifBadge" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full hidden border-2 border-slate-800"></span>
+                            <button onclick="toggleNotifications()"
+                                class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-all relative">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                </svg>
+                                <span id="notifBadge"
+                                    class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full hidden border-2 border-slate-800"></span>
                             </button>
-                            <div id="notifDropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden animate-pop text-left">
-                                <div class="px-4 py-3 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                            <div id="notifDropdown"
+                                class="hidden absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden animate-pop text-left">
+                                <div
+                                    class="px-4 py-3 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                                     <h4 class="font-bold text-slate-800 text-sm">Notifications</h4>
-                                    <button onclick="requestNotificationPermission()" class="text-[10px] font-bold text-emerald-600 uppercase hover:underline">Enable Push Alerts</button>
+                                    <button onclick="requestNotificationPermission()"
+                                        class="text-[10px] font-bold text-emerald-600 uppercase hover:underline">Enable
+                                        Push Alerts</button>
                                 </div>
                                 <div id="notifList" class="max-h-64 overflow-y-auto divide-y divide-slate-100">
                                     <div class="p-4 text-center text-slate-400 text-xs italic">No new alerts.</div>
@@ -163,33 +211,61 @@
                             </div>
                         </div>
 
-                        <button onclick="logout()" class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg></button>
+                        <button onclick="logout()"
+                            class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-all"><svg
+                                class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path
+                                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg></button>
                     </div>
                 </div>
             </header>
-            
+
             <div class="max-w-6xl mx-auto px-6 py-8">
                 <div class="glass-card rounded-2xl p-6 mb-8 relative">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-xl font-bold text-slate-800">Student Profile</h2>
                         <div class="flex gap-2">
-                            <button onclick="toggleLiveQueue()" class="flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg font-semibold text-sm">
+                            <button onclick="toggleLiveQueue()"
+                                class="flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg font-semibold text-sm">
                                 <span class="pulse-dot w-2 h-2 rounded-full bg-emerald-500"></span> Live Queue
                             </button>
-                            <button onclick="toggleEditProfile()" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-semibold text-sm hover:bg-slate-200">Update Info</button>
+                            <button onclick="toggleEditProfile()"
+                                class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-semibold text-sm hover:bg-slate-200">Update
+                                Info</button>
                         </div>
                     </div>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        <div><p class="text-xs text-slate-500 mb-1 font-bold uppercase">Full Name</p><p id="profileName" class="font-semibold text-slate-800">--</p></div>
-                        <div><p class="text-xs text-slate-500 mb-1 font-bold uppercase">GR Number</p><p id="profileGrNumber" class="font-semibold text-slate-800">--</p></div>
-                        <div><p class="text-xs text-slate-500 mb-1 font-bold uppercase">Department</p><p id="profileDept" class="font-semibold text-slate-800">--</p></div>
-                        <div><p class="text-xs text-slate-500 mb-1 font-bold uppercase">Current Year</p><p id="profileYear" class="font-semibold text-slate-800">--</p></div>
-                        <div><p class="text-xs text-slate-500 mb-1 font-bold uppercase">MahaDBT ID</p><p id="profileMahaDBT" class="font-semibold text-emerald-600">--</p></div>
-                        <div><p class="text-xs text-slate-500 mb-1 font-bold uppercase">Category</p><p id="profileSchType" class="font-semibold text-slate-800">--</p></div>
-                        
-                        <div class="bg-slate-100/50 p-3 rounded-xl border border-slate-200 col-span-2 md:col-span-2 flex justify-between items-center">
+                        <div>
+                            <p class="text-xs text-slate-500 mb-1 font-bold uppercase">Full Name</p>
+                            <p id="profileName" class="font-semibold text-slate-800">--</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500 mb-1 font-bold uppercase">GR Number</p>
+                            <p id="profileGrNumber" class="font-semibold text-slate-800">--</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500 mb-1 font-bold uppercase">Department</p>
+                            <p id="profileDept" class="font-semibold text-slate-800">--</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500 mb-1 font-bold uppercase">Current Year</p>
+                            <p id="profileYear" class="font-semibold text-slate-800">--</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500 mb-1 font-bold uppercase">MahaDBT ID</p>
+                            <p id="profileMahaDBT" class="font-semibold text-emerald-600">--</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500 mb-1 font-bold uppercase">Category</p>
+                            <p id="profileSchType" class="font-semibold text-slate-800">--</p>
+                        </div>
+
+                        <div
+                            class="bg-slate-100/50 p-3 rounded-xl border border-slate-200 col-span-2 md:col-span-2 flex justify-between items-center">
                             <div>
-                                <p class="text-[10px] text-slate-500 font-black uppercase tracking-wider mb-1">Free Attempts</p>
+                                <p class="text-[10px] text-slate-500 font-black uppercase tracking-wider mb-1">Free
+                                    Attempts</p>
                                 <p id="profileAttempts" class="font-bold text-slate-800 text-lg">--</p>
                             </div>
                             <div class="text-right">
@@ -200,15 +276,39 @@
                     </div>
                 </div>
 
-                <div id="studentStatusBanner" class="glass-card rounded-2xl p-6 mb-8 border-l-8 border-slate-300 animate-slide shadow-md transition-all duration-500" style="animation-delay: 0.05s">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Current Academic Year Validation</p>
-                            <h3 id="overallStatusText" class="text-2xl font-black text-slate-800 tracking-tight">Checking Status...</h3>
-                            <p id="overallStatusSubtext" class="text-sm font-medium text-slate-500 mt-1">Please wait while we sync with the queue...</p>
+                <div id="studentStatusBanner"
+                    class="glass-card rounded-2xl p-6 mb-8 border-l-8 border-slate-300 animate-slide shadow-md transition-all duration-500"
+                    style="animation-delay: 0.05s">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div class="flex items-center justify-between flex-1">
+                            <div>
+                                <p class="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Current
+                                    Academic Year Validation</p>
+                                <h3 id="overallStatusText" class="text-2xl font-black text-slate-800 tracking-tight">
+                                    Checking Status...</h3>
+                                <div id="overallStatusSubtext" class="text-sm font-medium text-slate-500 mt-1">Please
+                                    wait
+                                    while we sync with the queue...</div>
+                            </div>
+                            <div id="overallStatusIcon"
+                                class="hidden md:flex w-14 h-14 rounded-full bg-slate-100 items-center justify-center text-slate-400 shadow-inner shrink-0 ml-4">
+                                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
                         </div>
-                        <div id="overallStatusIcon" class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shadow-inner">
-                            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+
+                        <div id="bannerCancelBlock"
+                            class="hidden shrink-0 w-full md:w-auto border-t border-slate-200 pt-4 md:border-0 md:pt-0">
+                            <button onclick="openCancelModal()"
+                                class="w-full md:w-auto px-6 py-2.5 bg-red-50 text-red-600 font-bold text-sm rounded-xl border border-red-200 hover:bg-red-100 hover:border-red-300 transition-all flex items-center justify-center gap-2 shadow-sm">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Cancel Appointment
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -241,54 +341,74 @@
 
                 <div id="liveQueueSection" class="hidden mb-8 animate-slide">
                     <div class="glass-card rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                            <div class="bg-emerald-500 rounded-xl p-5 text-white shadow-lg">
-                                <p class="text-sm opacity-80">Current Token</p>
-                                <p id="currentToken" class="text-4xl font-bold">--</p>
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                            <div
+                                class="bg-emerald-500 rounded-xl p-4 md:p-5 text-white shadow-lg col-span-2 md:col-span-1">
+                                <p class="text-xs md:text-sm opacity-80">Current Token</p>
+                                <p id="currentToken" class="text-3xl md:text-4xl font-bold">--</p>
                             </div>
-                            <div class="bg-white rounded-xl p-5 border border-slate-200">
-                                <p class="text-sm text-slate-500">Your Token</p>
-                                <p id="yourToken" class="text-4xl font-bold text-slate-800">--</p>
+                            <div class="bg-white rounded-xl p-4 md:p-5 border border-slate-200">
+                                <p class="text-xs md:text-sm text-slate-500">Your Token</p>
+                                <p id="yourToken" class="text-2xl md:text-3xl lg:text-4xl font-bold text-slate-800">--
+                                </p>
                             </div>
-                            <div class="bg-white rounded-xl p-5 border border-slate-200">
-                                <p class="text-sm text-slate-500">Your Slot</p>
-                                <p id="yourSlotTime" class="text-2xl font-bold text-emerald-600">--</p>
+                            <div class="bg-white rounded-xl p-4 md:p-5 border border-slate-200">
+                                <p class="text-xs md:text-sm text-slate-500">People Ahead</p>
+                                <p id="peopleAhead" class="text-2xl md:text-3xl lg:text-4xl font-bold text-violet-600">
+                                    --</p>
                             </div>
-                            <div class="bg-white rounded-xl p-5 border border-slate-200">
-                                <p class="text-sm text-slate-500">Est. Wait Time</p>
-                                <p id="waitTime" class="text-4xl font-bold text-slate-800">--</p>
+                            <div class="bg-white rounded-xl p-4 md:p-5 border border-slate-200">
+                                <p class="text-xs md:text-sm text-slate-500">Your Slot</p>
+                                <div id="yourSlotTime" class="text-lg md:text-xl font-bold text-emerald-600">--</div>
+                            </div>
+                            <div class="bg-white rounded-xl p-4 md:p-5 border border-slate-200">
+                                <p class="text-xs md:text-sm text-slate-500" id="waitLabel">Queue Status</p>
+                                <p id="waitTime" class="text-2xl md:text-3xl lg:text-4xl font-bold text-slate-800">--
+                                </p>
                             </div>
                         </div>
-                        
-                        <div class="border-t border-slate-100 pt-4 flex flex-col md:flex-row justify-between items-center gap-4">
-                            <p class="text-xs text-slate-500 font-medium"><span class="font-bold text-emerald-500">Note:</span> Please arrive at the Verification Cell 5 mins before your estimated time.</p>
-                            <button onclick="openCancelModal()" class="w-full md:w-auto px-4 py-2 bg-red-50 text-red-600 font-bold text-xs rounded-lg border border-red-100 hover:bg-red-100 transition-colors flex items-center justify-center gap-2">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                                Cancel Appointment
-                            </button>
+
+                        <div class="border-t border-slate-100 pt-4 flex justify-center text-center">
+                            <p class="text-xs text-slate-500 font-medium"><span
+                                    class="font-bold text-emerald-500">Note:</span> Please arrive at the Verification
+                                Cell 5 mins before your estimated time.</p>
                         </div>
                     </div>
                 </div>
 
                 <div id="bookingLockedMessage" class="hidden animate-slide mb-8">
                     <div class="glass-card rounded-2xl p-10 border-2 border-dashed border-slate-200 text-center">
-                        <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        <div
+                            class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
                         </div>
                         <h3 class="text-xl font-bold text-slate-800 mb-2">MahaDBT App ID Required</h3>
-                        <p class="text-slate-500 mb-6 max-w-md mx-auto">Please enter your MahaDBT Application ID in your profile to unlock slot booking.</p>
-                        <a href="https://mahadbt.maharashtra.gov.in/" target="_blank" class="inline-flex items-center gap-2 px-8 py-3 bg-slate-800 text-white rounded-xl font-semibold hover:bg-slate-900 transition-all">Visit MahaDBT Portal</a>
+                        <p class="text-slate-500 mb-6 max-w-md mx-auto">Please enter your MahaDBT Application ID in your
+                            profile to unlock slot booking.</p>
+                        <a href="https://mahadbt.maharashtra.gov.in/" target="_blank"
+                            class="inline-flex items-center gap-2 px-8 py-3 bg-slate-800 text-white rounded-xl font-semibold hover:bg-slate-900 transition-all">Visit
+                            MahaDBT Portal</a>
                     </div>
                 </div>
 
                 <div id="fineLockedMessage" class="hidden animate-slide mb-8">
                     <div class="glass-card rounded-2xl p-10 border-2 border-red-300 bg-red-50 text-center shadow-lg">
-                        <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        <div
+                            class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
                         </div>
                         <h3 class="text-2xl font-black text-red-800 mb-2 tracking-tight">Booking Limit Exceeded</h3>
-                        <p class="text-red-700 mb-3 max-w-md mx-auto font-medium text-lg">You have used all your free verification attempts.</p>
-                        <p class="text-sm text-red-600/80 max-w-md mx-auto">To book another slot, you must visit the Admin desk in person to pay the late/re-verification fine. They will unlock your account.</p>
+                        <p class="text-red-700 mb-3 max-w-md mx-auto font-medium text-lg">You have used all your free
+                            verification attempts.</p>
+                        <p class="text-sm text-red-600/80 max-w-md mx-auto">To book another slot, you must visit the
+                            Admin desk in person to pay the late/re-verification fine. They will unlock your account.
+                        </p>
                     </div>
                 </div>
 
@@ -301,19 +421,26 @@
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">Select Date (Next 3 Allowed)</label>
-                                <select id="slotDate" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500"></select>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Select Date (Next 3
+                                    Allowed)</label>
+                                <select id="slotDate"
+                                    class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500"></select>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">Select Time (9:30 AM - 5:00 PM)</label>
-                                <select id="slotTime" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500"></select>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Select Time (9:30 AM - 5:00
+                                    PM)</label>
+                                <select id="slotTime"
+                                    class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500"></select>
                             </div>
                         </div>
-                        <button onclick="bookSlot()" id="bookSlotBtn" class="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-600 transition-all"> Confirm Booking </button>
+                        <button onclick="bookSlot()" id="bookSlotBtn"
+                            class="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-600 transition-all">
+                            Confirm Booking </button>
                     </div>
                 </div>
 
-                <div class="glass-card rounded-2xl overflow-hidden shadow-xl animate-slide" style="animation-delay: 0.2s">
+                <div class="glass-card rounded-2xl overflow-hidden shadow-xl animate-slide"
+                    style="animation-delay: 0.2s">
                     <div class="px-6 py-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                         <h2 class="text-xl font-bold text-slate-800">Booking History</h2>
                     </div>
@@ -327,26 +454,35 @@
                                 </tr>
                             </thead>
                             <tbody id="studentHistoryBody" class="divide-y divide-slate-100 bg-white">
-                                </tbody>
+                            </tbody>
                         </table>
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <div id="adminDashboard" class="hidden min-h-full">
             <header class="bg-slate-900 border-b border-slate-700 sticky top-0 z-50">
                 <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-                    <div class="flex items-center gap-3"><span class="text-xl font-bold text-white">ScholarSwift Admin</span></div>
+                    <div class="flex items-center gap-3"><span class="text-xl font-bold text-white">ScholarSwift
+                            Admin</span></div>
                     <div class="flex items-center gap-4">
-                        
-                        <button onclick="toggleAdminView('directory')" id="btnViewDirectory" class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+
+                        <button onclick="toggleAdminView('directory')" id="btnViewDirectory"
+                            class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
                             Student Directory
                         </button>
 
-                        <button onclick="toggleAdminView('stats')" id="btnViewStats" class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        <button onclick="toggleAdminView('stats')" id="btnViewStats"
+                            class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
                             Reports
                         </button>
 
@@ -354,23 +490,31 @@
                             <p id="adminName" class="text-white font-medium">--</p>
                             <p id="todaysDept" class="text-xs text-violet-400 font-bold uppercase">--</p>
                         </div>
-                        <button onclick="logout()" class="p-2 rounded-lg bg-slate-800 text-slate-400 transition-all hover:text-white"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 16l4-4m0 0l-4-4m4 4H7" /></svg></button>
+                        <button onclick="logout()"
+                            class="p-2 rounded-lg bg-slate-800 text-slate-400 transition-all hover:text-white"><svg
+                                class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path d="M17 16l4-4m0 0l-4-4m4 4H7" />
+                            </svg></button>
                     </div>
                 </div>
             </header>
-            
+
             <div id="adminLiveQueueView" class="max-w-7xl mx-auto px-6 py-8 block">
-                <div class="glass-card rounded-3xl p-8 mb-8 shadow-xl border-l-8 border-violet-500 relative overflow-hidden">
+                <div
+                    class="glass-card rounded-3xl p-8 mb-8 shadow-xl border-l-8 border-violet-500 relative overflow-hidden">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-800">Verification Command Center</h2>
                             <div class="flex items-center gap-2 mt-1">
                                 <span id="queueStatusDot" class="pulse-dot w-3 h-3 rounded-full bg-emerald-500"></span>
-                                <span id="queueStatusText" class="text-sm text-emerald-600 font-bold uppercase tracking-widest">Active</span>
+                                <span id="queueStatusText"
+                                    class="text-sm text-emerald-600 font-bold uppercase tracking-widest">Active</span>
                             </div>
                         </div>
                         <div class="bg-slate-800 text-white px-5 py-2 rounded-2xl shadow-inner border border-slate-700">
-                            <p class="text-[10px] uppercase font-bold text-slate-400 tracking-widest leading-none mb-1 text-center">System Time</p>
+                            <p
+                                class="text-[10px] uppercase font-bold text-slate-400 tracking-widest leading-none mb-1 text-center">
+                                System Time</p>
                             <p id="liveClock" class="text-lg font-black font-mono">00:00:00</p>
                         </div>
                     </div>
@@ -378,25 +522,38 @@
                     <div id="activeDossier" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         <div class="space-y-6">
                             <div>
-                                <p class="text-xs font-bold text-slate-400 uppercase tracking-tighter mb-2">Currently Serving</p>
-                                <h3 id="activeStudentName" class="text-2xl font-bold text-slate-800 leading-tight">--</h3>
-                                <p id="adminCurrentToken" class="text-lg font-mono font-bold text-violet-600">TOKEN: --</p>
+                                <p class="text-xs font-bold text-slate-400 uppercase tracking-tighter mb-2">Currently
+                                    Serving</p>
+                                <h3 id="activeStudentName" class="text-2xl font-bold text-slate-800 leading-tight">--
+                                </h3>
+                                <p id="adminCurrentToken" class="text-lg font-mono font-bold text-violet-600">TOKEN: --
+                                </p>
                             </div>
 
-                            <div class="glass-card rounded-2xl p-6 bg-slate-50 border border-slate-200 relative overflow-hidden" id="timerContainer">
+                            <div class="glass-card rounded-2xl p-6 bg-slate-50 border border-slate-200 relative overflow-hidden"
+                                id="timerContainer">
                                 <div class="flex justify-between items-start mb-4">
                                     <div>
-                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Time Remaining</p>
-                                        <h3 id="sessionTimer" class="text-4xl font-black text-slate-800 tracking-tight">07:00</h3>
-                                        <p id="activeSlotIndicator" class="text-[11px] font-bold text-violet-500 mt-1 uppercase italic">Slot: --</p>
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Time
+                                            Remaining</p>
+                                        <h3 id="sessionTimer" class="text-4xl font-black text-slate-800 tracking-tight">
+                                            07:00</h3>
+                                        <p id="activeSlotIndicator"
+                                            class="text-[11px] font-bold text-violet-500 mt-1 uppercase italic">Slot: --
+                                        </p>
                                     </div>
                                     <div class="flex flex-col gap-2">
-                                        <button onclick="addExtraTime()" class="px-3 py-1 bg-violet-100 text-violet-600 text-[10px] font-bold rounded-lg uppercase hover:bg-violet-200 transition-all">+5 Min</button>
-                                        <button id="startTimerBtn" onclick="manualStartTimer()" class="px-3 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded-lg uppercase shadow-sm hover:bg-emerald-600 transition-all hidden">Start Timer</button>
+                                        <button onclick="addExtraTime()"
+                                            class="px-3 py-1 bg-violet-100 text-violet-600 text-[10px] font-bold rounded-lg uppercase hover:bg-violet-200 transition-all">+5
+                                            Min</button>
+                                        <button id="startTimerBtn" onclick="manualStartTimer()"
+                                            class="px-3 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded-lg uppercase shadow-sm hover:bg-emerald-600 transition-all hidden">Start
+                                            Timer</button>
                                     </div>
                                 </div>
                                 <div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                                    <div id="timerProgress" class="bg-emerald-500 h-full transition-all duration-1000" style="width: 100%"></div>
+                                    <div id="timerProgress" class="bg-emerald-500 h-full transition-all duration-1000"
+                                        style="width: 100%"></div>
                                 </div>
                             </div>
 
@@ -413,9 +570,14 @@
                         </div>
 
                         <div class="bg-slate-50 rounded-2xl p-5 border border-slate-100">
-                            <h4 class="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center justify-between">
+                            <h4
+                                class="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center justify-between">
                                 <span class="flex items-center gap-2">
-                                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                    </svg>
                                     Checklist
                                 </span>
                                 <span id="docProgress" class="text-emerald-500 font-bold">0/0 Verified</span>
@@ -431,14 +593,25 @@
 
                         <div class="flex flex-col justify-between">
                             <div class="space-y-3">
-                                <button onclick="updateActiveStatus('verified')" class="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl shadow-lg transition-all transform hover:scale-[1.02]">Verify Student</button>
-                                <button onclick="updateActiveStatus('pending')" class="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl shadow-lg transition-all">Mark as Pending</button>
-                                <button onclick="updateActiveStatus('no_show')" class="w-full py-3 bg-slate-400 hover:bg-slate-500 text-white font-bold rounded-2xl shadow-md transition-all">Didn't Show Up</button>
+                                <button onclick="updateActiveStatus('verified')"
+                                    class="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl shadow-lg transition-all transform hover:scale-[1.02]">Verify
+                                    Student</button>
+                                <button onclick="updateActiveStatus('pending')"
+                                    class="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl shadow-lg transition-all">Mark
+                                    as Pending</button>
+                                <button onclick="updateActiveStatus('no_show')"
+                                    class="w-full py-3 bg-slate-400 hover:bg-slate-500 text-white font-bold rounded-2xl shadow-md transition-all">Didn't
+                                    Show Up</button>
                             </div>
                             <div class="grid grid-cols-2 gap-3 mt-6">
-                                <button onclick="nextToken()" class="px-4 py-3 bg-slate-800 text-white font-semibold rounded-xl transition-all hover:bg-slate-900">Next Case</button>
-                                <button onclick="togglePause()" id="pauseBtn" class="px-4 py-3 bg-slate-100 text-slate-600 font-semibold rounded-xl transition-all hover:bg-slate-200">Pause</button>
-                                <button onclick="resetQueueDelay()" class="col-span-2 px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all">⟲ Reset Time Delay</button>
+                                <button onclick="nextToken()"
+                                    class="px-4 py-3 bg-slate-800 text-white font-semibold rounded-xl transition-all hover:bg-slate-900">Next
+                                    Case</button>
+                                <button onclick="togglePause()" id="pauseBtn"
+                                    class="px-4 py-3 bg-slate-100 text-slate-600 font-semibold rounded-xl transition-all hover:bg-slate-200">Pause</button>
+                                <button onclick="resetQueueDelay()"
+                                    class="col-span-2 px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all">⟲
+                                    Reset Time Delay</button>
                             </div>
                         </div>
                     </div>
@@ -464,8 +637,12 @@
                         <h2 class="text-2xl font-bold text-white">Verification Analytics</h2>
                         <p class="text-slate-400 text-sm mt-1">Download and filter college-wide verification data.</p>
                     </div>
-                    <button onclick="toggleAdminView('live')" class="px-4 py-2 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-700 transition-all flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    <button onclick="toggleAdminView('live')"
+                        class="px-4 py-2 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-700 transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
                         Back to Queue
                     </button>
                 </div>
@@ -493,7 +670,8 @@
                     <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                         <div>
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Department</label>
-                            <select id="filterDept" onchange="applyFilters()" class="w-full px-4 py-2.5 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
+                            <select id="filterDept" onchange="applyFilters()"
+                                class="w-full px-4 py-2.5 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
                                 <option value="ALL">All Departments</option>
                                 <option value="COMP">Computer</option>
                                 <option value="IT">IT</option>
@@ -506,7 +684,8 @@
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Academic Year</label>
-                            <select id="filterYear" onchange="applyFilters()" class="w-full px-4 py-2.5 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
+                            <select id="filterYear" onchange="applyFilters()"
+                                class="w-full px-4 py-2.5 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
                                 <option value="ALL">All Years</option>
                                 <option value="1">1st Year (FE)</option>
                                 <option value="2">2nd Year (SE)</option>
@@ -516,7 +695,8 @@
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Status</label>
-                            <select id="filterStatus" onchange="applyFilters()" class="w-full px-4 py-2.5 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
+                            <select id="filterStatus" onchange="applyFilters()"
+                                class="w-full px-4 py-2.5 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
                                 <option value="ALL">All Statuses</option>
                                 <option value="verified">Verified Only</option>
                                 <option value="pending">Pending Only</option>
@@ -525,7 +705,8 @@
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Time Period</label>
-                            <select id="filterTimeRange" onchange="applyFilters()" class="w-full px-4 py-2.5 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
+                            <select id="filterTimeRange" onchange="applyFilters()"
+                                class="w-full px-4 py-2.5 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
                                 <option value="ALL">All Time</option>
                                 <option value="TODAY">Today</option>
                                 <option value="WEEK">Past 7 Days</option>
@@ -535,12 +716,17 @@
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Exact Date</label>
-                            <input type="date" id="filterDate" onchange="applyFilters()" class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
+                            <input type="date" id="filterDate" onchange="applyFilters()"
+                                class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none focus:border-violet-500 bg-white text-sm">
                         </div>
                     </div>
                     <div class="flex justify-end border-t border-slate-100 pt-4">
-                        <button onclick="downloadCSV()" class="w-full md:w-auto px-8 py-2.5 bg-emerald-500 text-white font-bold rounded-lg hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 shadow-md">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        <button onclick="downloadCSV()"
+                            class="w-full md:w-auto px-8 py-2.5 bg-emerald-500 text-white font-bold rounded-lg hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 shadow-md">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
                             Export CSV
                         </button>
                     </div>
@@ -549,7 +735,8 @@
                 <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
                     <div class="overflow-x-auto max-h-[500px]">
                         <table class="w-full relative">
-                            <thead class="bg-slate-100 text-left text-xs uppercase font-bold text-slate-500 sticky top-0 z-10 shadow-sm">
+                            <thead
+                                class="bg-slate-100 text-left text-xs uppercase font-bold text-slate-500 sticky top-0 z-10 shadow-sm">
                                 <tr class="divide-x divide-slate-200">
                                     <th class="px-4 py-3">Date</th>
                                     <th class="px-4 py-3">Student Name</th>
@@ -561,7 +748,9 @@
                                 </tr>
                             </thead>
                             <tbody id="statsTableBody" class="divide-y divide-slate-100 bg-white text-sm">
-                                <tr><td colspan="7" class="text-center py-10 text-slate-400">Loading data...</td></tr>
+                                <tr>
+                                    <td colspan="7" class="text-center py-10 text-slate-400">Loading data...</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -574,8 +763,12 @@
                         <h2 class="text-2xl font-bold text-white">Student Directory</h2>
                         <p class="text-slate-400 text-sm mt-1">Search, view profiles, and manage fine payments.</p>
                     </div>
-                    <button onclick="toggleAdminView('live')" class="px-4 py-2 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-700 transition-all flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    <button onclick="toggleAdminView('live')"
+                        class="px-4 py-2 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-700 transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
                         Back to Queue
                     </button>
                 </div>
@@ -583,16 +776,22 @@
                 <div class="glass-card rounded-2xl p-6 mb-8 shadow-md">
                     <div class="relative">
                         <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
                         </div>
-                        <input type="text" id="dirSearchInput" onkeyup="filterDirectory()" placeholder="Search by Name, GR Number, Email, or MahaDBT ID..." class="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 outline-none focus:border-violet-500 bg-white text-lg shadow-sm">
+                        <input type="text" id="dirSearchInput" onkeyup="filterDirectory()"
+                            placeholder="Search by Name, GR Number, Email, or MahaDBT ID..."
+                            class="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 outline-none focus:border-violet-500 bg-white text-lg shadow-sm">
                     </div>
                 </div>
 
                 <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
                     <div class="overflow-x-auto max-h-[600px]">
                         <table class="w-full relative">
-                            <thead class="bg-slate-100 text-left text-xs uppercase font-bold text-slate-500 sticky top-0 z-10 shadow-sm">
+                            <thead
+                                class="bg-slate-100 text-left text-xs uppercase font-bold text-slate-500 sticky top-0 z-10 shadow-sm">
                                 <tr class="divide-x divide-slate-200">
                                     <th class="px-6 py-4">Student Info</th>
                                     <th class="px-6 py-4">Academic Details</th>
@@ -600,7 +799,9 @@
                                 </tr>
                             </thead>
                             <tbody id="directoryTableBody" class="divide-y divide-slate-100 bg-white text-sm">
-                                <tr><td colspan="3" class="text-center py-10 text-slate-400">Loading directory...</td></tr>
+                                <tr>
+                                    <td colspan="3" class="text-center py-10 text-slate-400">Loading directory...</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -608,22 +809,25 @@
             </div>
 
         </div>
-        
-        <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-[100]">
+
+        <div id="toast"
+            class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-[100]">
             <div class="bg-slate-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3">
                 <span class="pulse-dot w-2 h-2 rounded-full bg-emerald-400"></span>
                 <span id="toastMessage">--</span>
             </div>
         </div>
 
-        <div id="updateProfileModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div id="updateProfileModal"
+            class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-pop">
                 <h3 class="text-xl font-bold text-slate-800 mb-2">Update Academic Info</h3>
                 <p class="text-sm text-slate-500 mb-6">Keep your profile current for this year's scholarship cycle.</p>
                 <div class="space-y-4">
                     <div>
                         <label class="text-xs font-bold text-slate-400 uppercase">Current Year</label>
-                        <select id="editCurrentYear" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none mt-1 focus:border-emerald-500 bg-white">
+                        <select id="editCurrentYear"
+                            class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none mt-1 focus:border-emerald-500 bg-white">
                             <option value="1">1st Year (FE)</option>
                             <option value="2">2nd Year (SE)</option>
                             <option value="3">3rd Year (TE)</option>
@@ -632,28 +836,38 @@
                     </div>
                     <div>
                         <label class="text-xs font-bold text-slate-400 uppercase">New MahaDBT Application ID</label>
-                        <input type="text" id="editMahadbtId" placeholder="e.g. APP12345678" class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none mt-1 focus:border-emerald-500">
+                        <input type="text" id="editMahadbtId" placeholder="e.g. APP12345678"
+                            class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none mt-1 focus:border-emerald-500">
                     </div>
                 </div>
                 <div class="flex gap-3 mt-8">
-                    <button onclick="closeUpdateModal()" class="flex-1 px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all">Cancel</button>
-                    <button onclick="saveProfileUpdate()" class="flex-1 px-6 py-3 bg-emerald-500 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-600 transition-all">Save Changes</button>
+                    <button onclick="closeUpdateModal()"
+                        class="flex-1 px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all">Cancel</button>
+                    <button onclick="saveProfileUpdate()"
+                        class="flex-1 px-6 py-3 bg-emerald-500 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-600 transition-all">Save
+                        Changes</button>
                 </div>
             </div>
         </div>
 
-        <div id="studentDetailsModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <div class="bg-white rounded-3xl w-full max-w-3xl shadow-2xl animate-pop overflow-hidden flex flex-col max-h-[90vh]">
+        <div id="studentDetailsModal"
+            class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div
+                class="bg-white rounded-3xl w-full max-w-3xl shadow-2xl animate-pop overflow-hidden flex flex-col max-h-[90vh]">
                 <div class="px-8 py-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                     <h3 class="text-xl font-bold text-slate-800">Student Master Profile</h3>
                     <button onclick="closeStudentDetailsModal()" class="text-slate-400 hover:text-slate-600">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
-                
+
                 <div class="p-8 overflow-y-auto">
                     <div class="flex items-center gap-4 mb-8">
-                        <div class="w-16 h-16 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center text-2xl font-black shadow-sm" id="modalInitials">--</div>
+                        <div class="w-16 h-16 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center text-2xl font-black shadow-sm"
+                            id="modalInitials">--</div>
                         <div>
                             <h2 class="text-2xl font-black text-slate-800" id="modalName">--</h2>
                             <p class="text-slate-500 font-mono" id="modalEmail">--</p>
@@ -661,25 +875,56 @@
                     </div>
 
                     <div class="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
-                        <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">GR Number</p><p class="font-bold text-slate-800" id="modalGR">--</p></div>
-                        <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Phone</p><p class="font-bold text-slate-800" id="modalPhone">--</p></div>
-                        <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Department</p><p class="font-bold text-slate-800" id="modalDept">--</p></div>
-                        <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Joining Year</p><p class="font-bold text-slate-800" id="modalJoinYr">--</p></div>
-                        <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current Year</p><p class="font-bold text-slate-800" id="modalCurrYr">--</p></div>
-                        <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Scholarship</p><p class="font-bold text-violet-600 bg-violet-50 inline-block px-2 py-0.5 rounded" id="modalSchType">--</p></div>
-                        <div class="col-span-2"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">MahaDBT App ID</p><p class="font-bold text-emerald-600 font-mono" id="modalMahaDBT">--</p></div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">GR Number</p>
+                            <p class="font-bold text-slate-800" id="modalGR">--</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Phone</p>
+                            <p class="font-bold text-slate-800" id="modalPhone">--</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Department
+                            </p>
+                            <p class="font-bold text-slate-800" id="modalDept">--</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Joining Year
+                            </p>
+                            <p class="font-bold text-slate-800" id="modalJoinYr">--</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current Year
+                            </p>
+                            <p class="font-bold text-slate-800" id="modalCurrYr">--</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Scholarship
+                            </p>
+                            <p class="font-bold text-violet-600 bg-violet-50 inline-block px-2 py-0.5 rounded"
+                                id="modalSchType">--</p>
+                        </div>
+                        <div class="col-span-2">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">MahaDBT App
+                                ID</p>
+                            <p class="font-bold text-emerald-600 font-mono" id="modalMahaDBT">--</p>
+                        </div>
                     </div>
 
                     <hr class="border-slate-100 mb-6">
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                         <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Current Validation Status</p>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Current
+                                Validation Status</p>
                             <div id="modalCurrentStatus" class="font-bold text-xl text-slate-800 mb-2">--</div>
-                            <div id="modalPendingDocs" class="text-sm text-amber-700 hidden bg-amber-50 p-3 rounded-lg border border-amber-100"></div>
+                            <div id="modalPendingDocs"
+                                class="text-sm text-amber-700 hidden bg-amber-50 p-3 rounded-lg border border-amber-100">
+                            </div>
                         </div>
                         <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-center">
-                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Attempts Tracker</p>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Attempts
+                                Tracker</p>
                             <p id="modalAttemptsInfo" class="font-bold text-2xl text-slate-800">--</p>
                         </div>
                     </div>
@@ -696,16 +941,22 @@
                                     </tr>
                                 </thead>
                                 <tbody id="modalHistoryBody" class="divide-y divide-slate-100 bg-white">
-                                    </tbody>
+                                </tbody>
                             </table>
                         </div>
                     </div>
 
                     <div class="bg-amber-50 border border-amber-200 rounded-xl p-5 relative overflow-hidden">
                         <h4 class="font-bold text-amber-900 mb-2">Fine & Attempt Management</h4>
-                        <p class="text-sm text-amber-700 mb-4">If this student is locked out of booking due to multiple pending/no-show attempts, click below to record their fine payment and grant them 3 more booking attempts.</p>
-                        <button id="btnUnlockFine" onclick="grantExtraAttempts()" class="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow-md transition-all text-sm flex items-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        <p class="text-sm text-amber-700 mb-4">If this student is locked out of booking due to multiple
+                            pending/no-show attempts, click below to record their fine payment and grant them 3 more
+                            booking attempts.</p>
+                        <button id="btnUnlockFine" onclick="grantExtraAttempts()"
+                            class="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow-md transition-all text-sm flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
                             Mark Fine Paid & Unlock Account
                         </button>
                     </div>
@@ -713,16 +964,26 @@
             </div>
         </div>
 
-        <div id="cancelConfirmModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div id="cancelConfirmModal"
+            class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl animate-pop text-center">
-                <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                <div
+                    class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
                 </div>
                 <h3 class="text-xl font-bold text-slate-800 mb-2">Cancel Booking?</h3>
-                <p class="text-sm text-slate-500 mb-6">Are you sure you want to cancel your slot? Your attempt limit will be refunded.</p>
+                <p class="text-sm text-slate-500 mb-6">Are you sure you want to cancel your slot? Your attempt limit
+                    will be refunded.</p>
                 <div class="flex gap-3">
-                    <button onclick="closeCancelModal()" class="flex-1 px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all">Keep It</button>
-                    <button onclick="confirmCancelBooking()" class="flex-1 px-6 py-3 bg-red-500 text-white font-bold rounded-xl shadow-lg hover:bg-red-600 transition-all">Yes, Cancel</button>
+                    <button onclick="closeCancelModal()"
+                        class="flex-1 px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all">Keep
+                        It</button>
+                    <button onclick="confirmCancelBooking()"
+                        class="flex-1 px-6 py-3 bg-red-500 text-white font-bold rounded-xl shadow-lg hover:bg-red-600 transition-all">Yes,
+                        Cancel</button>
                 </div>
             </div>
         </div>
@@ -734,7 +995,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
     <script>
         const firebaseConfig = {
-            apiKey: "AIzaSyB8GzubR61QF2fYAnKJBI9kJwhFxXqVhF4", 
+            apiKey: "AIzaSyB8GzubR61QF2fYAnKJBI9kJwhFxXqVhF4",
             authDomain: "scolarswift.firebaseapp.com",
             projectId: "scolarswift",
             storageBucket: "scolarswift.firebasestorage.app",
@@ -748,4 +1009,5 @@
     </script>
     <script src="js/main.js"></script>
 </body>
+
 </html>

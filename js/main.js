@@ -5,23 +5,23 @@
 
 // ==================== CONFIG & STATE ====================
 let isTimerRunning = false;
-let isQueuePaused = false; 
+let isQueuePaused = false;
 let currentUser = null;
-let currentUserType = 'student'; 
+let currentUserType = 'student';
 let authMode = 'login';
 let sessionCountdown = null;
 let remainingSeconds = 420;
 let globalDelayMinutes = 0;
 
-let allAppointmentsData = []; 
-let allStudentsData = []; 
-let activeModalStudentUid = null; 
+let allAppointmentsData = [];
+let allStudentsData = [];
+let activeModalStudentUid = null;
 
 // Notification & Sync State
 window.inAppNotifs = [];
 window.notifState = {};
-window.currentStudentActiveApp = null; 
-window.currentActiveTokenData = null; 
+window.currentStudentActiveApp = null;
+window.currentActiveTokenData = null;
 
 const scholarshipDocs = {
     'EBC': ['Income Certificate', 'Domicile Certificate', 'Mark Sheet', 'Fee Receipt', 'Ration Card'],
@@ -41,10 +41,10 @@ const deptToDay = {
     'DS': { day: 1, name: 'Monday' },
     'AIML': { day: 2, name: 'Tuesday' },
     'COMP': { day: 3, name: 'Wednesday' },
-    'IT': { day: 4, name: 'Thursday' },
-    'MECH': { day: 0, name: 'Sunday' },      
-    'CIVIL': { day: 0, name: 'Sunday' },     
-    'AUTOMOBILE': { day: 0, name: 'Sunday' } 
+    'IT': { day: 5, name: 'Friday' },
+    'MECH': { day: 6, name: 'Saturday' },
+    'CIVIL': { day: 6, name: 'Saturday' },
+    'AUTOMOBILE': { day: 6, name: 'Saturday' }
 };
 
 // ==================== HELPER FUNCTIONS ====================
@@ -70,72 +70,167 @@ function safeAddMinutes(timeStr, minsToAdd) {
         dateObj.setHours(hours, minutes + minsToAdd, 0, 0);
 
         return dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
-    } catch(e) {
-        return timeStr; 
+    } catch (e) {
+        return timeStr;
     }
 }
 
 function getSlotTokenNumber(selectedTimeStr) {
     let time = new Date();
-    time.setHours(9, 30, 0, 0); 
-    const bookingEnd = 23; 
+    time.setHours(9, 30, 0, 0);
+    const bookingEnd = 23;
     let tokenIndex = 1;
-    let safetyCounter = 0; 
+    let safetyCounter = 0;
 
     while (time.getHours() < bookingEnd && safetyCounter < 200) {
         safetyCounter++;
         if (time.getHours() === 13) { time.setHours(14, 0, 0, 0); continue; }
         const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
         if (timeStr === selectedTimeStr) return tokenIndex;
-        
+
         tokenIndex++;
         let endTime = new Date(time);
         endTime.setMinutes(endTime.getMinutes() + 7);
-        if (endTime.getHours() >= bookingEnd && endTime.getMinutes() > 0) break; 
+        if (endTime.getHours() >= bookingEnd && endTime.getMinutes() > 0) break;
         time.setMinutes(time.getMinutes() + 7);
     }
-    return tokenIndex; 
+    return tokenIndex;
+}
+
+
+// NEW: Proper numerical time sorting function
+function parseTime(timeStr) {
+    if (!timeStr || timeStr === "--:--") return 0;
+    const parts = timeStr.trim().split(/\s+/);
+    if (parts.length < 2) return 0;
+    let [hours, minutes] = parts[0].split(':').map(Number);
+    let modifier = parts[1].toUpperCase();
+    if (modifier === 'PM' && hours !== 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+}
+
+// NEW: Centralized Master Delay Calculation Engine for BOTH views
+function getMasterDelay() {
+    const now = new Date();
+    let masterDelay = globalDelayMinutes;
+
+    if (window.globalQueueHead && window.globalQueueHead.time) {
+        const headMins = parseTime(window.globalQueueHead.time);
+        if (headMins > 0) {
+            const headDate = new Date();
+            headDate.setHours(Math.floor(headMins / 60), (headMins % 60) + globalDelayMinutes, 0, 0);
+
+            // Use exact elapsed minutes for 1:1 synchronization
+            const driftMins = Math.floor((now - headDate) / 60000);
+            if (driftMins > 0) {
+                masterDelay += driftMins;
+            }
+        }
+    }
+    return masterDelay;
 }
 
 // ==================== INITIALIZATION ====================
 function initApp() {
-    startLiveClock(); 
+    startLiveClock();
     setMinDate();
-    listenToQueueSettings(); 
+    listenToQueueSettings();
     console.log('🚀 ScholarSwift initialized');
 }
+
 
 function startLiveClock() {
     const updateTime = () => {
         const now = new Date();
-        
-        // 1. Update Header Clock
+
         const clockEl = document.getElementById('liveClock');
         if (clockEl) {
             const options = { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
             clockEl.textContent = now.toLocaleString('en-US', options).replace(/,/g, ' |');
         }
 
-        // 2. Process Smart Notifications
+        // ONE unified delay for everyone in the system
+        let masterDelay = getMasterDelay();
+
         if (currentUserType === 'student' && window.currentStudentActiveApp) {
-            checkScheduledNotifications(window.currentStudentActiveApp);
+            const activeApp = window.currentStudentActiveApp;
+            checkScheduledNotifications(activeApp, masterDelay);
+
+            const waitEl = document.getElementById('waitTime');
+            const waitLabel = document.getElementById('waitLabel');
+            const slotEl = document.getElementById('yourSlotTime');
+
+            if (waitEl && waitLabel && slotEl && activeApp.time) {
+                const originalStart = activeApp.time ? String(activeApp.time).toLowerCase() : "--:--";
+                const originalEnd = originalStart !== "--:--" ? safeAddMinutes(originalStart, 7) : "--:--";
+
+                if (activeApp.status === 'current' && activeApp.isProcessing) {
+                    waitEl.textContent = "In Progress";
+                    waitLabel.textContent = "Queue Status";
+                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-blue-600";
+                } else if (isQueuePaused) {
+                    waitEl.textContent = "Paused";
+                    waitLabel.textContent = "Queue Status";
+                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-amber-500";
+                } else if (masterDelay > 0) {
+                    waitEl.textContent = `+${masterDelay} mins`;
+                    waitLabel.textContent = "Running Late";
+                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-red-500";
+                } else {
+                    waitEl.textContent = "On Time";
+                    waitLabel.textContent = "Queue Status";
+                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-emerald-500";
+                }
+
+                if (masterDelay > 0 && originalStart !== "--:--") {
+                    const delayedEnd = safeAddMinutes(originalEnd, masterDelay);
+                    let delayedStart = safeAddMinutes(originalStart, masterDelay);
+                    if (activeApp.status === 'current') delayedStart = originalStart;
+
+                    slotEl.innerHTML = `
+                        <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
+                            SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="block text-[10px] uppercase font-bold text-red-400">Expected</span>
+                                <span class="text-xl font-bold text-red-500 tracking-tight leading-none block mt-1">${delayedStart} - ${delayedEnd}</span>
+                            </div>
+                            <div class="bg-red-50 border border-red-100 rounded-lg px-2 py-1 text-center shadow-sm">
+                                <span class="block text-[8px] uppercase font-black tracking-widest text-red-400 leading-none mb-0.5">Delayed</span>
+                                <span class="text-sm font-black text-red-600">+${masterDelay}m</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    slotEl.innerHTML = `
+                        <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
+                            SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="block text-[10px] uppercase font-bold text-emerald-500">Expected</span>
+                                <span class="text-xl font-bold text-emerald-600 tracking-tight leading-none block mt-1">${originalStart} - ${originalEnd}</span>
+                            </div>
+                            <div class="bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 text-center shadow-sm">
+                                <span class="block text-[8px] uppercase font-black tracking-widest text-emerald-500 leading-none mb-0.5">Status</span>
+                                <span class="text-sm font-black text-emerald-600">On Time</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
         }
 
-        // 3. FIX: Dynamic Current Token Visibility
         const tokenEl = document.getElementById('currentToken');
         if (tokenEl && window.currentActiveTokenData) {
             const data = window.currentActiveTokenData;
-            const [timeStr, modifier] = (data.time || "09:30 AM").split(' ');
-            
-            if(modifier) {
-                let [hours, minutes] = timeStr.split(':').map(Number);
-                if (modifier.toLowerCase() === 'pm' && hours !== 12) hours += 12;
-                if (modifier.toLowerCase() === 'am' && hours === 12) hours = 0;
-                
+            const headMins = parseTime(data.time);
+            if (headMins > 0) {
                 const scheduledDate = new Date();
-                scheduledDate.setHours(hours, minutes + globalDelayMinutes, 0, 0);
-                
-                // Show token only if the admin explicitly started processing OR their clock time actually arrived
+                scheduledDate.setHours(Math.floor(headMins / 60), (headMins % 60) + globalDelayMinutes, 0, 0);
+
                 if (data.isProcessing || now >= scheduledDate) {
                     tokenEl.textContent = data.token;
                 } else {
@@ -146,27 +241,27 @@ function startLiveClock() {
             tokenEl.textContent = "--";
         }
     };
-    updateTime(); 
+    updateTime();
     setInterval(updateTime, 1000);
 }
 
 function listenToQueueSettings() {
-    // Listen for queue delays and pauses
+    // 1. Listen for manual queue delays and pauses
     db.collection('settings').doc('queueStatus').onSnapshot(doc => {
         if (doc.exists) {
             const data = doc.data();
             isQueuePaused = data.isPaused || false;
             globalDelayMinutes = data.delayMinutes || 0;
-            
+
             if (currentUserType === 'admin' && document.getElementById('queueTableBody')) {
-                showAdminDashboard(); 
+                showAdminDashboard();
             } else if (currentUserType === 'student' && currentUser) {
-                showStudentDashboard(); 
+                showStudentDashboard();
             }
         }
     });
 
-    // NEW: Universal Active Token Listener (Feeds the Live Clock safely)
+    // 2. Universal Active Token Listener
     db.collection('appointments').where('status', '==', 'current').limit(1).onSnapshot(snap => {
         if (!snap.empty) {
             window.currentActiveTokenData = snap.docs[0].data();
@@ -175,6 +270,18 @@ function listenToQueueSettings() {
             window.currentActiveTokenData = null;
         }
     });
+
+    // 3. Global Queue Head Listener with safe numerical sorting
+    const todayStr = new Date().toISOString().split('T')[0];
+    db.collection('appointments')
+        .where('date', '==', todayStr)
+        .where('status', 'in', ['current', 'waiting'])
+        .onSnapshot(snap => {
+            let list = [];
+            snap.forEach(doc => list.push(doc.data()));
+            list.sort((a, b) => parseTime(a.time) - parseTime(b.time));
+            window.globalQueueHead = list.length > 0 ? list[0] : null;
+        });
 }
 
 function setMinDate() {
@@ -205,11 +312,11 @@ function sendPushNotification(title, body) {
 }
 
 function addInAppNotification(text) {
-    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     window.inAppNotifs.unshift({ text, time });
     renderInAppNotifs();
     const badge = document.getElementById('notifBadge');
-    if(badge) badge.classList.remove('hidden');
+    if (badge) badge.classList.remove('hidden');
 }
 
 function renderInAppNotifs() {
@@ -230,23 +337,23 @@ function renderInAppNotifs() {
 function toggleNotifications() {
     const drop = document.getElementById('notifDropdown');
     const badge = document.getElementById('notifBadge');
-    if(drop) drop.classList.toggle('hidden');
-    if(badge) badge.classList.add('hidden'); 
+    if (drop) drop.classList.toggle('hidden');
+    if (badge) badge.classList.add('hidden');
 }
 
-function checkScheduledNotifications(activeApp) {
+function checkScheduledNotifications(activeApp, currentDelay = globalDelayMinutes) {
     if (!activeApp || !activeApp.time) return;
 
     const now = new Date();
     const [timeStr, modifier] = activeApp.time.split(' ');
-    if(!modifier) return;
+    if (!modifier) return;
 
     let [hours, minutes] = timeStr.split(':').map(Number);
     if (modifier.toLowerCase() === 'pm' && hours !== 12) hours += 12;
     if (modifier.toLowerCase() === 'am' && hours === 12) hours = 0;
 
     const scheduledDate = new Date();
-    scheduledDate.setHours(hours, minutes + globalDelayMinutes, 0, 0);
+    scheduledDate.setHours(hours, minutes + currentDelay, 0, 0);
 
     const diffMins = Math.ceil((scheduledDate - now) / 60000);
 
@@ -272,41 +379,66 @@ function checkScheduledNotifications(activeApp) {
 // ==================== AUTH FUNCTIONS ====================
 function setUserType(type) {
     currentUserType = type;
+
     const studentToggle = document.getElementById('studentToggle');
     const adminToggle = document.getElementById('adminToggle');
     const signupTab = document.getElementById('signupTab');
-    
+    const authTabs = document.getElementById('authTabs');
+    const authTitle = document.getElementById('authTitle');
+
     if (type === 'student') {
+
+        // Student ACTIVE
         studentToggle.classList.add('bg-emerald-500', 'text-white');
+        studentToggle.classList.remove('text-slate-400');
+
+        authTabs.classList.remove('hidden');
+        authTitle.textContent = "Student Login";
+
+        // Admin INACTIVE
         adminToggle.classList.remove('bg-violet-500', 'text-white');
-        if(signupTab) signupTab.classList.remove('hidden');
+        adminToggle.classList.add('text-slate-400', 'hover:text-white');
+
+        if (signupTab) signupTab.classList.remove('hidden');
+
     } else {
+
+        // Admin ACTIVE
         adminToggle.classList.add('bg-violet-500', 'text-white');
+        adminToggle.classList.remove('text-slate-400');
+
+        authTabs.classList.add('hidden');
+        authTitle.textContent = "Admin Login";
+
+        // Student INACTIVE
         studentToggle.classList.remove('bg-emerald-500', 'text-white');
-        if(signupTab) signupTab.classList.add('hidden');
-        setAuthMode('login'); 
+        studentToggle.classList.add('text-slate-400', 'hover:text-white');
+
+        if (signupTab) signupTab.classList.add('hidden');
+
+        setAuthMode('login');
     }
 }
 
 function setAuthMode(mode) {
     if (currentUserType === 'admin' && mode === 'signup') return;
     authMode = mode;
-    
+
     const loginTab = document.getElementById('loginTab');
     const signupTab = document.getElementById('signupTab');
     const signupExtraFields = document.getElementById('signupExtraFields');
     const authSubmit = document.getElementById('authSubmit');
-    
+
     if (mode === 'login') {
-        if(loginTab) loginTab.classList.add('bg-white', 'shadow', 'text-slate-800');
-        if(signupTab) signupTab.classList.remove('bg-white', 'shadow', 'text-slate-800');
+        if (loginTab) loginTab.classList.add('bg-white', 'shadow', 'text-slate-800');
+        if (signupTab) signupTab.classList.remove('bg-white', 'shadow', 'text-slate-800');
         if (signupExtraFields) signupExtraFields.classList.add('hidden');
-        if(authSubmit) authSubmit.textContent = 'Sign In';
+        if (authSubmit) authSubmit.textContent = 'Sign In';
     } else {
-        if(signupTab) signupTab.classList.add('bg-white', 'shadow', 'text-slate-800');
-        if(loginTab) loginTab.classList.remove('bg-white', 'shadow', 'text-slate-800');
+        if (signupTab) signupTab.classList.add('bg-white', 'shadow', 'text-slate-800');
+        if (loginTab) loginTab.classList.remove('bg-white', 'shadow', 'text-slate-800');
         if (signupExtraFields) signupExtraFields.classList.remove('hidden');
-        if(authSubmit) authSubmit.textContent = 'Create Account';
+        if (authSubmit) authSubmit.textContent = 'Create Account';
     }
 }
 
@@ -334,7 +466,7 @@ async function handleAuth(event) {
 
                 const scholarId = `${dept}${Math.floor(100 + Math.random() * 900)}`;
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                
+
                 const studentData = {
                     firstName, lastName, name: `${firstName} ${lastName}`,
                     email, contactNo, scholarId, department: dept, grNumber: grNumber.toUpperCase(),
@@ -373,58 +505,6 @@ async function handleAuth(event) {
 }
 
 // ==================== STUDENT DASHBOARD & UI UPDATES ====================
-async function updateWaitTimeDisplay(activeApp, delayMins) {
-    try {
-        const statusDoc = await db.collection('settings').doc('queueStatus').get();
-        const paused = statusDoc.exists ? statusDoc.data().isPaused : false;
-
-        const waitEl = document.getElementById('waitTime');
-        if (!waitEl) return;
-        const waitLabel = waitEl.previousElementSibling;
-
-        const now = new Date();
-        const [time, modifier] = activeApp.time.split(' ');
-        let [hours, minutes] = time.split(':').map(Number);
-        if (modifier.toLowerCase() === 'pm' && hours !== 12) hours += 12;
-        if (modifier.toLowerCase() === 'am' && hours === 12) hours = 0;
-
-        const scheduledDate = new Date();
-        scheduledDate.setHours(hours, minutes + delayMins, 0, 0);
-
-        const diffMins = Math.ceil((scheduledDate - now) / 60000);
-
-        // FIX: Display Status exactly as requested (In Progress only when actively processed)
-        if (activeApp.status === 'current' && (activeApp.isProcessing || diffMins <= 0)) {
-            waitEl.textContent = "In Progress";
-            waitLabel.textContent = "Queue Status";
-            waitEl.className = "text-3xl font-bold text-blue-600";
-            return;
-        }
-
-        if (paused) {
-            waitEl.textContent = "Paused";
-            waitLabel.textContent = "Queue Status";
-            waitEl.className = "text-3xl font-bold text-amber-500";
-        } else if (delayMins > 0) {
-            waitEl.textContent = `+${delayMins} mins`;
-            waitLabel.textContent = "Queue Delay";
-            waitEl.className = "text-4xl font-bold text-red-500";
-            
-            const delayKey = activeApp.token + '_delay_' + delayMins;
-            if (!window.notifState[delayKey]) {
-                const msg = `Queue Update: There is a delay of ${delayMins} mins. Your expected time has been adjusted.`;
-                sendPushNotification("Queue Delayed", msg);
-                addInAppNotification(msg);
-                window.notifState[delayKey] = true;
-            }
-        } else {
-            waitEl.textContent = "On Time";
-            waitLabel.textContent = "Queue Status";
-            waitEl.className = "text-3xl font-bold text-emerald-500";
-        }
-
-    } catch (e) { console.error(e); }
-}
 
 function showStudentDashboard() {
     if (!currentUser) return;
@@ -448,20 +528,20 @@ function showStudentDashboard() {
             const bookingContainer = document.getElementById('bookingContainer');
             const liveQueue = document.getElementById('liveQueueSection');
             const fineMessage = document.getElementById('fineLockedMessage');
-            
+
             let allApps = [];
             snap.forEach(doc => allApps.push({ id: doc.id, ...doc.data() }));
-            
+
             allApps.sort((a, b) => {
                 if (a.date !== b.date) return b.date.localeCompare(a.date);
-                return (b.time || "").localeCompare(a.time || "");
+                return parseTime(a.time) - parseTime(b.time);
             });
 
             // ATTEMPTS MATH 
             const usedAttempts = allApps.filter(a => a.status !== 'cancelled').length;
             const extraAttempts = currentUser.extraAttempts || 0;
             const attemptsLeft = Math.max(0, (3 + extraAttempts) - usedAttempts);
-            
+
             const attemptsEl = document.getElementById('profileAttempts');
             if (attemptsEl) {
                 attemptsEl.textContent = `${attemptsLeft}/${3 + extraAttempts}`;
@@ -469,11 +549,11 @@ function showStudentDashboard() {
             }
 
             // CORE VARIABLES FOR LOGIC
-            const isVerified = allApps.some(a => String(a.status).includes('verified')); 
-            const activeApp = allApps.find(a => ['waiting', 'current'].includes(a.status)); 
+            const isVerified = allApps.some(a => String(a.status).includes('verified'));
+            const activeApp = allApps.find(a => ['waiting', 'current'].includes(a.status));
             const lastProcessedApp = allApps.find(a => ['pending', 'pending_closed', 'no_show', 'no_show_closed'].includes(a.status));
 
-            // Sync active app globally for the Polling Engine
+            // Sync active app globally for the Live Clock Engine
             window.currentStudentActiveApp = activeApp || null;
 
             // BANNER UI ELEMENTS
@@ -483,26 +563,26 @@ function showStudentDashboard() {
             const statusIcon = document.getElementById('overallStatusIcon');
 
             let bColor = 'border-slate-300'; let iconBg = 'bg-slate-100'; let iconText = 'text-slate-400';
-            let title = "Not Verified Yet"; 
+            let title = "Not Verified Yet";
             let subtextHtml = "Please book a slot below to verify your documents.";
             let svg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>`;
 
             // STEP 1: ESTABLISH CORE ACADEMIC STATUS
             if (isVerified) {
                 bColor = 'border-emerald-500'; iconBg = 'bg-emerald-100'; iconText = 'text-emerald-600';
-                title = "Verified ✓"; 
+                title = "Verified ✓";
                 subtextHtml = "Your MahaDBT application is successfully verified for this year.";
                 svg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>`;
             } else {
                 let hasPendingDocs = false;
                 let missingHtml = "";
-                
+
                 if (lastProcessedApp && String(lastProcessedApp.status).includes('pending')) {
                     hasPendingDocs = true;
                     bColor = 'border-amber-500'; iconBg = 'bg-amber-100'; iconText = 'text-amber-600';
-                    title = "Documents Pending ⚠"; 
+                    title = "Documents Pending ⚠";
                     svg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>`;
-                    
+
                     const requiredDocs = scholarshipDocs[currentUser.scholarshipType] || [];
                     const verifiedMap = lastProcessedApp.documentVerification || {};
                     const missingDocs = requiredDocs.filter(d => !verifiedMap[d]);
@@ -522,7 +602,7 @@ function showStudentDashboard() {
                 if (activeApp) {
                     bColor = 'border-blue-500'; iconBg = 'bg-blue-100'; iconText = 'text-blue-600';
                     if (!hasPendingDocs) title = "Verification Scheduled";
-                    
+
                     subtextHtml = missingHtml + `<div class="mt-2 text-sm font-medium text-blue-700 bg-blue-50 inline-block px-3 py-2 rounded-lg border border-blue-100 shadow-sm">📅 Scheduled for <span class="font-bold">${activeApp.date}</span> at <span class="font-bold">${activeApp.time}</span></div>`;
                     svg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>`;
                 } else {
@@ -545,11 +625,11 @@ function showStudentDashboard() {
                 }
             }
 
-            if(banner) {
-                banner.className = `glass-card rounded-2xl p-6 mb-8 border-l-8 ${bColor} animate-slide transition-all duration-500`;
+            if (banner) {
+                banner.className = `glass-card rounded-2xl p-6 mb-8 border-l-8 ${bColor} animate-slide shadow-md transition-all duration-500`;
                 statusText.textContent = title;
-                statusSub.innerHTML = subtextHtml; 
-                statusIcon.className = `w-14 h-14 rounded-full flex items-center justify-center shadow-inner ${iconBg} ${iconText}`;
+                statusSub.innerHTML = subtextHtml;
+                statusIcon.className = `hidden md:flex w-14 h-14 rounded-full items-center justify-center shadow-inner shrink-0 ml-4 ${iconBg} ${iconText}`;
                 statusIcon.innerHTML = `<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svg}</svg>`;
             }
 
@@ -563,12 +643,12 @@ function showStudentDashboard() {
                     allApps.forEach(app => {
                         const row = document.createElement('tr');
                         row.className = 'hover:bg-slate-50 transition-colors';
-                        
+
                         let badgeStyle = "";
                         let statusLabel = "";
-                        const baseStatus = app.status ? app.status.replace('_closed', '') : 'waiting'; 
+                        const baseStatus = app.status ? app.status.replace('_closed', '') : 'waiting';
 
-                        switch(baseStatus) {
+                        switch (baseStatus) {
                             case 'current': badgeStyle = "bg-emerald-500 text-white animate-pulse shadow-sm"; statusLabel = "Current"; break;
                             case 'verified': badgeStyle = "bg-emerald-100 text-emerald-700 border border-emerald-200"; statusLabel = "Verified"; break;
                             case 'pending': badgeStyle = "bg-amber-100 text-amber-700 border border-amber-200"; statusLabel = "Pending"; break;
@@ -595,67 +675,57 @@ function showStudentDashboard() {
                 }
             }
 
-            // Booking Visibility Logic & Queue Widget
             if (activeApp) {
                 if (bookingContainer) bookingContainer.classList.add('hidden');
                 if (fineMessage) fineMessage.classList.add('hidden');
                 if (liveQueue) liveQueue.classList.remove('hidden');
-                
-                document.getElementById('yourToken').textContent = activeApp.token;
-                
-                const originalStart = activeApp.time ? String(activeApp.time).toLowerCase() : "--:--";
-                const originalEnd = originalStart !== "--:--" ? safeAddMinutes(originalStart, 7) : "--:--";
-                const slotEl = document.getElementById('yourSlotTime');
-                
-                if (globalDelayMinutes > 0 && originalStart !== "--:--") {
-                    const delayedEnd = safeAddMinutes(originalEnd, globalDelayMinutes);
-                    let delayedStart = safeAddMinutes(originalStart, globalDelayMinutes);
-                    if (activeApp.status === 'current') delayedStart = originalStart; 
 
-                    slotEl.innerHTML = `
-                        <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
-                            SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span class="block text-[10px] uppercase font-bold text-red-400">Expected</span>
-                                <span class="text-xl font-bold text-red-500 tracking-tight leading-none block mt-1">${delayedStart} - ${delayedEnd}</span>
-                            </div>
-                            <div class="bg-red-50 border border-red-100 rounded-lg px-2 py-1 text-center shadow-sm">
-                                <span class="block text-[8px] uppercase font-black tracking-widest text-red-400 leading-none mb-0.5">Delayed</span>
-                                <span class="text-sm font-black text-red-600">+${globalDelayMinutes}m</span>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    slotEl.innerHTML = `
-                        <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
-                            SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span class="block text-[10px] uppercase font-bold text-emerald-500">Expected</span>
-                                <span class="text-xl font-bold text-emerald-600 tracking-tight leading-none block mt-1">${originalStart} - ${originalEnd}</span>
-                            </div>
-                            <div class="bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 text-center shadow-sm">
-                                <span class="block text-[8px] uppercase font-black tracking-widest text-emerald-500 leading-none mb-0.5">Status</span>
-                                <span class="text-sm font-black text-emerald-600">On Time</span>
-                            </div>
-                        </div>
-                    `;
+                document.getElementById('yourToken').textContent = activeApp.token;
+
+                const cancelBlock = document.getElementById('bannerCancelBlock');
+                if (cancelBlock) {
+                    if (activeApp.status === 'current') {
+                        cancelBlock.classList.add('hidden');
+                    } else {
+                        cancelBlock.classList.remove('hidden');
+                    }
                 }
 
-                updateWaitTimeDisplay(activeApp, globalDelayMinutes);
+                db.collection('appointments').where('date', '==', activeApp.date).where('status', '==', 'waiting').get().then(waitSnap => {
+                    let waitingList = [];
+                    waitSnap.forEach(doc => waitingList.push(doc.data()));
+                    waitingList.sort((a, b) => parseTime(a.time) - parseTime(b.time));
+                    const position = waitingList.findIndex(s => s.token === activeApp.token);
+                    const aheadEl = document.getElementById('peopleAhead');
+                    if (aheadEl && activeApp.status === 'waiting') {
+                        aheadEl.textContent = position === -1 ? "0" : position;
+                    } else if (aheadEl) {
+                        aheadEl.textContent = "0";
+                    }
+                });
+
+                const slotEl = document.getElementById('yourSlotTime');
+                if (slotEl) slotEl.innerHTML = `<span class="animate-pulse text-xs text-slate-400">Syncing live clock...</span>`;
 
             } else {
                 if (liveQueue) liveQueue.classList.add('hidden');
-                
+
+                const cancelBlock = document.getElementById('bannerCancelBlock');
+                if (cancelBlock) cancelBlock.classList.add('hidden');
+
+                const waitEl = document.getElementById('waitTime');
+                if (waitEl) waitEl.textContent = "--";
+                const slotEl = document.getElementById('yourSlotTime');
+                if (slotEl) slotEl.textContent = "--";
+                const aheadEl = document.getElementById('peopleAhead');
+                if (aheadEl) aheadEl.textContent = "--";
+
                 if (isVerified) {
                     if (bookingContainer) bookingContainer.classList.add('hidden');
                     if (fineMessage) fineMessage.classList.add('hidden');
                 } else if (attemptsLeft <= 0) {
                     if (bookingContainer) bookingContainer.classList.add('hidden');
-                    if (fineMessage) fineMessage.classList.remove('hidden'); 
+                    if (fineMessage) fineMessage.classList.remove('hidden');
                 } else if (currentUser.mahadbtId && currentUser.mahadbtId.trim() !== "") {
                     if (bookingContainer) bookingContainer.classList.remove('hidden');
                     if (fineMessage) fineMessage.classList.add('hidden');
@@ -684,92 +754,86 @@ async function confirmCancelBooking() {
             .where('uid', '==', currentUser.uid)
             .where('status', '==', 'waiting')
             .get();
-            
+
         if (!snap.empty) {
             const docId = snap.docs[0].id;
             await db.collection('appointments').doc(docId).update({ status: 'cancelled' });
             showToast("Appointment Cancelled. Attempt refunded.");
         }
         closeCancelModal();
-    } catch(e) {
+    } catch (e) {
         showToast("Error cancelling booking.");
     }
 }
 
 // ==================== ADMIN DASHBOARD ====================
-
 function showAdminDashboard() {
     document.getElementById('authPage').classList.add('hidden');
     document.getElementById('adminDashboard').classList.remove('hidden');
     document.getElementById('adminName').textContent = currentUser.name;
     document.getElementById('todaysDept').textContent = `${currentUser.role} | ${currentUser.department}`;
-    
+
     toggleAdminView('live');
 
     const todayStr = new Date().toISOString().split('T')[0];
 
-    db.collection('appointments').where('date', '==', todayStr) 
-        .onSnapshot(snap => {
+    window.renderAdminQueueTable = function () {
         const tbody = document.getElementById('queueTableBody');
-        if (tbody) {
-            tbody.innerHTML = '';
-            let list = [];
-            snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+        if (!tbody || !window.currentAdminQueueList) return;
 
-            list.sort((a, b) => (a.time||"").localeCompare(b.time||""));
+        let masterDelay = getMasterDelay(); // Uses the exact same math as the student view!
+        let newHtml = '';
 
-            list.forEach(data => {
-                const row = document.createElement('tr');
-                const isCurrent = data.status === 'current';
-                
-                let badgeStyle = "";
-                let statusLabel = "";
-                const baseStatus = data.status ? data.status.replace('_closed', '') : 'waiting'; 
-                
-                if (baseStatus === 'cancelled') return;
+        window.currentAdminQueueList.forEach(data => {
+            const isCurrent = data.status === 'current';
+            let badgeStyle = "";
+            let statusLabel = "";
+            const baseStatus = data.status ? data.status.replace('_closed', '') : 'waiting';
 
-                row.className = `divide-x divide-slate-100 transition-all duration-500 ${isCurrent ? 'bg-emerald-50/50 ring-2 ring-inset ring-emerald-500 shadow-lg z-10 relative' : 'hover:bg-slate-50'}`;
+            if (baseStatus === 'cancelled') return;
 
-                switch(baseStatus) {
-                    case 'current': badgeStyle = "bg-emerald-500 text-white animate-pulse shadow-sm"; statusLabel = "Current"; break;
-                    case 'verified': badgeStyle = "bg-emerald-100 text-emerald-700 border border-emerald-200"; statusLabel = "Verified"; break;
-                    case 'pending': badgeStyle = "bg-red-100 text-red-700 border border-red-200"; statusLabel = "Pending"; break;
-                    case 'no_show': badgeStyle = "bg-slate-200 text-slate-600 border border-slate-300"; statusLabel = "Didn't Show"; break;
-                    case 'waiting': badgeStyle = "bg-violet-50 text-violet-600 border border-violet-100"; statusLabel = "Waiting"; break;
-                    default: badgeStyle = "bg-slate-100 text-slate-500"; statusLabel = data.status;
+            let rowClass = `divide-x divide-slate-100 transition-all duration-500 ${isCurrent ? 'bg-emerald-50/50 ring-2 ring-inset ring-emerald-500 shadow-lg z-10 relative' : 'hover:bg-slate-50'}`;
+
+            switch (baseStatus) {
+                case 'current': badgeStyle = "bg-emerald-500 text-white animate-pulse shadow-sm"; statusLabel = "Current"; break;
+                case 'verified': badgeStyle = "bg-emerald-100 text-emerald-700 border border-emerald-200"; statusLabel = "Verified"; break;
+                case 'pending': badgeStyle = "bg-amber-100 text-amber-700 border border-amber-200"; statusLabel = "Pending"; break;
+                case 'no_show': badgeStyle = "bg-slate-200 text-slate-600 border border-slate-300"; statusLabel = "Didn't Show"; break;
+                case 'waiting': badgeStyle = "bg-violet-50 text-violet-600 border border-violet-100"; statusLabel = "Waiting"; break;
+                default: badgeStyle = "bg-slate-100 text-slate-500"; statusLabel = data.status;
+            }
+
+            const originalStart = data.time ? String(data.time).toLowerCase() : "--:--";
+            const originalEnd = originalStart !== "--:--" ? safeAddMinutes(originalStart, 7) : "--:--";
+            let timeHtml = "";
+
+            if (['verified', 'pending', 'no_show'].includes(baseStatus)) {
+                timeHtml = `<span class="text-slate-500">${originalStart} - ${originalEnd}</span>`;
+            } else {
+                if (masterDelay > 0 && originalStart !== "--:--") {
+                    const delayedEnd = safeAddMinutes(originalEnd, masterDelay);
+                    let delayedStart = safeAddMinutes(originalStart, masterDelay);
+                    if (baseStatus === 'current') delayedStart = originalStart;
+
+                    timeHtml = `
+                        <span class="text-slate-500 mr-3">SCH: ${originalStart} - ${originalEnd}</span> 
+                        <span class="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded border border-red-100 mt-1 inline-flex items-center gap-2">
+                            EXP: ${delayedStart} - ${delayedEnd}
+                            <span class="bg-red-500 text-white px-1.5 py-0.5 rounded-sm text-[9px] animate-pulse shadow-sm">+${masterDelay}m</span>
+                        </span>
+                    `;
+                } else if (originalStart !== "--:--") {
+                    timeHtml = `
+                        <span class="text-slate-500 mr-3">SCH: ${originalStart} - ${originalEnd}</span> 
+                        <span class="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1 inline-flex items-center gap-2 text-[10px]">
+                            ON TIME
+                        </span>
+                    `;
                 }
+            }
 
-                const originalStart = data.time ? String(data.time).toLowerCase() : "--:--";
-                const originalEnd = originalStart !== "--:--" ? safeAddMinutes(originalStart, 7) : "--:--";
-                let timeHtml = "";
-
-                if (['verified', 'pending', 'no_show'].includes(baseStatus)) {
-                    timeHtml = `<span class="text-slate-500">${originalStart} - ${originalEnd}</span>`;
-                } else {
-                    if (globalDelayMinutes > 0 && originalStart !== "--:--") {
-                        const delayedEnd = safeAddMinutes(originalEnd, globalDelayMinutes);
-                        let delayedStart = safeAddMinutes(originalStart, globalDelayMinutes);
-                        
-                        if (baseStatus === 'current') delayedStart = originalStart; 
-
-                        timeHtml = `
-                            <span class="text-slate-500 mr-3">SCH: ${originalStart} - ${originalEnd}</span> 
-                            <span class="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded border border-red-100 mt-1 inline-flex items-center gap-2">
-                                EXP: ${delayedStart} - ${delayedEnd}
-                                <span class="bg-red-500 text-white px-1.5 py-0.5 rounded-sm text-[9px] animate-pulse shadow-sm">+${globalDelayMinutes}m</span>
-                            </span>
-                        `;
-                    } else if (originalStart !== "--:--") {
-                        timeHtml = `
-                            <span class="text-slate-500 mr-3">SCH: ${originalStart} - ${originalEnd}</span> 
-                            <span class="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1 inline-flex items-center gap-2 text-[10px]">
-                                ON TIME
-                            </span>
-                        `;
-                    }
-                }
-
-                row.innerHTML = `
+            newHtml += `
+                <tr class="${rowClass}">
                     <td class="px-6 py-4 font-mono font-bold ${isCurrent ? 'text-emerald-600 scale-110' : 'text-slate-500'} transition-transform">${data.token}</td>
                     <td class="px-6 py-4">
                         <p class="font-bold ${isCurrent ? 'text-emerald-900' : 'text-slate-800'}">${data.name}</p>
@@ -783,41 +847,34 @@ function showAdminDashboard() {
                             ${statusLabel}
                         </span>
                     </td>
-                `;
-                tbody.appendChild(row);
-            });
+                </tr>
+            `;
+        });
+
+        tbody.innerHTML = newHtml;
+    };
+
+    if (window.adminQueueSnapshotObj) window.adminQueueSnapshotObj();
+
+    window.adminQueueSnapshotObj = db.collection('appointments').where('date', '==', todayStr)
+        .onSnapshot(snap => {
+            let list = [];
+            snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+            list.sort((a, b) => parseTime(a.time) - parseTime(b.time));
+
+            window.currentAdminQueueList = list;
+            window.renderAdminQueueTable();
+            refreshActiveStudentDisplay();
+        });
+
+    // FIX: Ticks every 1 SECOND (1000ms) to perfectly match the student's dashboard
+    if (window.adminTableUpdateInterval) clearInterval(window.adminTableUpdateInterval);
+    window.adminTableUpdateInterval = setInterval(() => {
+        if (!isQueuePaused && window.renderAdminQueueTable) {
+            window.renderAdminQueueTable();
         }
-        refreshActiveStudentDisplay();
-    });
-
-    setInterval(async () => {
-        if (isQueuePaused) return;
-
-        const activeSnap = await db.collection('appointments').where('status', 'in', ['current', 'verified', 'pending', 'no_show']).limit(1).get();
-
-        if (activeSnap.empty) {
-            const now = new Date();
-            const currentTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
-            const todayStr = now.toISOString().split('T')[0];
-
-            const waitingSnap = await db.collection('appointments').where('date', '==', todayStr).where('status', '==', 'waiting').get();
-
-            let toCall = [];
-            waitingSnap.forEach(doc => {
-                if ((doc.data().time||"").toLowerCase() <= currentTimeStr) {
-                    toCall.push({ id: doc.id, ...doc.data() });
-                }
-            });
-
-            if (toCall.length > 0) {
-                toCall.sort((a, b) => (a.time||"").localeCompare(b.time||""));
-                await db.collection('appointments').doc(toCall[0].id).update({ status: 'current' });
-                showToast(`Auto-calling ${toCall[0].name}`);
-            }
-        }
-    }, 10000); 
+    }, 1000);
 }
-
 function toggleAdminView(view) {
     const liveView = document.getElementById('adminLiveQueueView');
     const statsView = document.getElementById('adminStatsView');
@@ -825,35 +882,35 @@ function toggleAdminView(view) {
     const btnViewStats = document.getElementById('btnViewStats');
     const btnViewDir = document.getElementById('btnViewDirectory');
 
-    if(liveView) liveView.classList.add('hidden');
-    if(statsView) statsView.classList.add('hidden');
-    if(dirView) dirView.classList.add('hidden');
+    if (liveView) liveView.classList.add('hidden');
+    if (statsView) statsView.classList.add('hidden');
+    if (dirView) dirView.classList.add('hidden');
 
     if (view === 'stats') {
-        if(statsView) statsView.classList.remove('hidden');
+        if (statsView) statsView.classList.remove('hidden');
         loadStatsData();
     } else if (view === 'directory') {
-        if(dirView) dirView.classList.remove('hidden');
+        if (dirView) dirView.classList.remove('hidden');
         loadStudentDirectory();
     } else {
-        if(liveView) liveView.classList.remove('hidden');
+        if (liveView) liveView.classList.remove('hidden');
     }
 }
 
 async function refreshActiveStudentDisplay() {
     const snap = await db.collection('appointments').where('status', 'in', ['current', 'verified', 'pending', 'no_show']).limit(1).get();
-    
+
     const dossier = document.getElementById('activeDossier');
-    const container = dossier.parentElement; 
+    const container = dossier.parentElement;
     const checklistDiv = document.getElementById('docChecklist');
     const startTimerBtn = document.getElementById('startTimerBtn');
     const timerContainer = document.getElementById('timerContainer');
-    
+
     container.classList.remove('bg-emerald-50', 'bg-red-50', 'bg-slate-100', 'border-emerald-500', 'border-red-500', 'border-slate-400');
-    if(timerContainer) timerContainer.classList.remove('ring-4', 'ring-red-500', 'bg-red-50');
-    
+    if (timerContainer) timerContainer.classList.remove('ring-4', 'ring-red-500', 'bg-red-50');
+
     const oldFlag = document.getElementById('resultFlag');
-    if(oldFlag) oldFlag.remove();
+    if (oldFlag) oldFlag.remove();
 
     const actionButtons = document.querySelectorAll("[onclick*='updateActiveStatus']");
     actionButtons.forEach(btn => btn.classList.remove('hidden'));
@@ -868,13 +925,13 @@ async function refreshActiveStudentDisplay() {
         document.getElementById('activeMahaDBT').textContent = data.mahadbtId || "--";
         document.getElementById('activeSchType').textContent = data.scholarshipType;
         document.getElementById('adminCurrentToken').textContent = `TOKEN: ${data.token}`;
-        
-        if(document.getElementById('activeSlotIndicator')) {
+
+        if (document.getElementById('activeSlotIndicator')) {
             document.getElementById('activeSlotIndicator').textContent = `Slot: ${data.time}`;
         }
 
         if (['verified', 'pending', 'no_show'].includes(status)) {
-            isTimerRunning = false; 
+            isTimerRunning = false;
             const flag = document.createElement('div');
             flag.id = 'resultFlag';
             flag.className = `absolute top-24 right-8 px-6 py-2 rounded-full font-black text-xl uppercase tracking-widest shadow-md animate-pop text-white z-50`;
@@ -895,24 +952,26 @@ async function refreshActiveStudentDisplay() {
 
             container.appendChild(flag);
             actionButtons.forEach(btn => btn.classList.add('hidden'));
-            if(startTimerBtn) startTimerBtn.classList.add('hidden');
+            if (startTimerBtn) startTimerBtn.classList.add('hidden');
             if (sessionCountdown) clearInterval(sessionCountdown);
         } else {
-            if (isTimerRunning) {
-                if(startTimerBtn) startTimerBtn.classList.add('hidden');
-            } else {
-                if(startTimerBtn) startTimerBtn.classList.remove('hidden');
-                const timerDisplay = document.getElementById('sessionTimer');
-                if (timerDisplay && !sessionCountdown) timerDisplay.textContent = "07:00";
+            // FIX: Auto-Start Timer Logic. No more manual clicking!
+            if (!isTimerRunning && status === 'current') {
+                isTimerRunning = true;
+                startSessionTimer(420);
+                if (!data.isProcessing) {
+                    db.collection('appointments').doc(docRef.id).update({ isProcessing: true });
+                }
             }
+            if (startTimerBtn) startTimerBtn.classList.add('hidden'); // Ensure manual button is gone
         }
 
         const requiredDocs = scholarshipDocs[data.scholarshipType] || ['Aadhar Card'];
         const verifiedData = data.documentVerification || {};
         const verifiedCount = Object.values(verifiedData).filter(val => val === true).length;
-        
+
         document.getElementById('docProgress').textContent = `${verifiedCount}/${requiredDocs.length} Verified`;
-        
+
         checklistDiv.innerHTML = '';
         requiredDocs.forEach(doc => {
             const isChecked = verifiedData[doc] === true;
@@ -930,7 +989,7 @@ async function refreshActiveStudentDisplay() {
         isTimerRunning = false;
         document.getElementById('activeStudentName').textContent = "Desk Available";
         document.getElementById('docProgress').textContent = "0/0 Verified";
-        if(startTimerBtn) startTimerBtn.classList.add('hidden');
+        if (startTimerBtn) startTimerBtn.classList.add('hidden');
         checklistDiv.innerHTML = `<div class="flex flex-col items-center justify-center py-12 text-center text-slate-300 animate-pulse"><svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><h4 class="font-bold">Queue is Empty</h4></div>`;
     }
 }
@@ -939,78 +998,77 @@ async function refreshActiveStudentDisplay() {
 async function manualStartTimer() {
     isTimerRunning = true;
     const startBtn = document.getElementById('startTimerBtn');
-    if (startBtn) startBtn.classList.add('hidden'); 
-    startSessionTimer(420); 
+    if (startBtn) startBtn.classList.add('hidden');
+    startSessionTimer(420);
 
     try {
         const snap = await db.collection('appointments').where('status', '==', 'current').limit(1).get();
         if (!snap.empty) {
             await db.collection('appointments').doc(snap.docs[0].id).update({ isProcessing: true });
         }
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
 }
 
 function startSessionTimer(s) {
     if (sessionCountdown) clearInterval(sessionCountdown);
     remainingSeconds = s;
-    isTimerRunning = true; 
+    isTimerRunning = true;
 
     const timerDisplay = document.getElementById('sessionTimer');
     const timerContainer = document.getElementById('timerContainer');
     const progressBar = document.getElementById('timerProgress');
 
-    timerDisplay.classList.remove('text-red-500', 'animate-pulse');
-    timerContainer.classList.remove('ring-4', 'ring-red-500', 'bg-red-50');
+    if (timerDisplay) timerDisplay.classList.remove('text-red-500', 'animate-pulse');
+    if (timerContainer) timerContainer.classList.remove('ring-4', 'ring-red-500', 'bg-red-50');
 
     sessionCountdown = setInterval(() => {
         remainingSeconds--;
         const mins = Math.floor(remainingSeconds / 60);
         const secs = remainingSeconds % 60;
-        
-        timerDisplay.textContent = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
-        let totalScale = Math.max(420, remainingSeconds); 
-        progressBar.style.width = `${(remainingSeconds / totalScale) * 100}%`;
+
+        if (timerDisplay) timerDisplay.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        let totalScale = Math.max(420, remainingSeconds);
+        if (progressBar) progressBar.style.width = `${(remainingSeconds / totalScale) * 100}%`;
 
         if (remainingSeconds <= 0) {
             clearInterval(sessionCountdown);
-            isTimerRunning = false;
-            timerDisplay.textContent = "00:00";
-            timerDisplay.classList.add('text-red-500', 'animate-pulse');
-            timerContainer.classList.add('ring-4', 'ring-red-500', 'bg-red-50');
-            showToast("Time Expired! Please finalize or add time.");
+            // DO NOT set isTimerRunning = false here. They are still at the desk!
+            showToast("Slot time exceeded! Auto-adding 5 mins to Queue Delay.");
+
+            addExtraTime();
         }
     }, 1000);
 }
 
 async function addExtraTime() {
-    remainingSeconds += 300; 
+    remainingSeconds += 300;
 
     const timerDisplay = document.getElementById('sessionTimer');
     const timerContainer = document.getElementById('timerContainer');
-    if(timerDisplay) timerDisplay.classList.remove('text-red-500', 'animate-pulse');
-    if(timerContainer) timerContainer.classList.remove('ring-4', 'ring-red-500', 'bg-red-50');
+    if (timerDisplay) timerDisplay.classList.remove('text-red-500', 'animate-pulse');
+    if (timerContainer) timerContainer.classList.remove('ring-4', 'ring-red-500', 'bg-red-50');
 
     startSessionTimer(remainingSeconds);
-    
+
     try {
         await db.collection('settings').doc('queueStatus').set({
             delayMinutes: firebase.firestore.FieldValue.increment(5)
         }, { merge: true });
         showToast("+5 Minutes Added & Queue Delayed");
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
 }
 
 async function resetQueueDelay() {
     try {
         await db.collection('settings').doc('queueStatus').set({ delayMinutes: 0 }, { merge: true });
         showToast("Queue Delay Reset to 0");
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
 }
 
 async function updateActiveStatus(newStatus) {
     try {
         const snap = await db.collection('appointments').where('status', '==', 'current').limit(1).get();
-        if(snap.empty) return showToast("No active student.");
+        if (snap.empty) return showToast("No active student.");
 
         const docRef = snap.docs[0];
         const data = docRef.data();
@@ -1026,14 +1084,14 @@ async function updateActiveStatus(newStatus) {
             }
         }
 
-        await db.collection('appointments').doc(docRef.id).update({ 
-            status: newStatus, 
-            processedAt: new Date().toISOString() 
+        await db.collection('appointments').doc(docRef.id).update({
+            status: newStatus,
+            processedAt: new Date().toISOString()
         });
-        
+
         let recoveredMins = 0;
         if (globalDelayMinutes > 0 && remainingSeconds > 0) {
-            const timeSaved = Math.floor(remainingSeconds / 60); 
+            const timeSaved = Math.floor(remainingSeconds / 60);
             if (timeSaved > 0) {
                 recoveredMins = Math.min(globalDelayMinutes, timeSaved);
                 const newDelay = globalDelayMinutes - recoveredMins;
@@ -1052,7 +1110,7 @@ async function updateActiveStatus(newStatus) {
         } else {
             showToast(`Student set to ${newStatus.toUpperCase()}`);
         }
-        
+
     } catch (e) { showToast("System error."); }
 }
 
@@ -1075,19 +1133,20 @@ async function nextToken() {
         const finishedAtDesk = await db.collection('appointments').where('status', 'in', ['verified', 'pending', 'no_show']).get();
 
         finishedAtDesk.forEach(doc => {
-            let finalStatus = doc.data().status === 'verified' ? 'verified_closed' : 
-                             doc.data().status === 'pending' ? 'pending_closed' : 'no_show_closed';
+            let finalStatus = doc.data().status === 'verified' ? 'verified_closed' :
+                doc.data().status === 'pending' ? 'pending_closed' : 'no_show_closed';
             batch.update(doc.ref, { status: finalStatus });
         });
 
         const allWaiting = await db.collection('appointments').where('status', '==', 'waiting').get();
         let list = [];
-        allWaiting.forEach(doc => list.push({id: doc.id, data: doc.data()}));
-        list.sort((a,b) => (a.data.time||"").localeCompare(b.data.time||""));
+        allWaiting.forEach(doc => list.push({ id: doc.id, data: doc.data() }));
+        list.sort((a, b) => parseTime(a.data.time) - parseTime(b.data.time));
 
         if (list.length > 0) {
-            batch.update(db.collection('appointments').doc(list[0].id), { status: 'current' });
-            remainingSeconds = 420; 
+            // NEW: Instantly flag as Processing so the timer starts immediately
+            batch.update(db.collection('appointments').doc(list[0].id), { status: 'current', isProcessing: true });
+            remainingSeconds = 420;
             await batch.commit();
         } else {
             await batch.commit();
@@ -1119,7 +1178,7 @@ async function loadStudentDirectory() {
         snap.forEach(doc => {
             allStudentsData.push({ uid: doc.id, ...doc.data() });
         });
-        filterDirectory(); 
+        filterDirectory();
     } catch (e) {
         showToast("Error loading directory.");
     }
@@ -1144,7 +1203,7 @@ function filterDirectory() {
         const tr = document.createElement('tr');
         tr.className = "hover:bg-slate-50 transition-colors cursor-pointer group";
         tr.onclick = () => openStudentDetailsModal(s);
-        
+
         tr.innerHTML = `
             <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
@@ -1173,7 +1232,7 @@ function filterDirectory() {
 
 async function openStudentDetailsModal(student) {
     activeModalStudentUid = student.uid;
-    
+
     // 1. Populate Basic Info
     document.getElementById('modalInitials').textContent = student.name.charAt(0).toUpperCase();
     document.getElementById('modalName').textContent = student.name;
@@ -1185,34 +1244,34 @@ async function openStudentDetailsModal(student) {
     document.getElementById('modalCurrYr').textContent = yearLabels[student.currentYear] || student.currentYear;
     document.getElementById('modalSchType').textContent = student.scholarshipType;
     document.getElementById('modalMahaDBT').textContent = student.mahadbtId || "Not Provided";
-    
+
     // 2. Fetch fresh appointment history from Firebase
     try {
         const snap = await db.collection('appointments').where('uid', '==', student.uid).get();
         let apps = [];
         snap.forEach(doc => apps.push(doc.data()));
-        
+
         apps.sort((a, b) => {
             if (a.date !== b.date) return b.date.localeCompare(a.date);
-            return (b.time || "").localeCompare(a.time || "");
+            return parseTime(a.time) - parseTime(b.time);
         });
 
         // 3. Render History Table inside Modal
         const tbody = document.getElementById('modalHistoryBody');
         tbody.innerHTML = '';
-        if(apps.length === 0) {
+        if (apps.length === 0) {
             tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">No bookings found for this student.</td></tr>`;
         } else {
             apps.forEach(app => {
                 let badgeStyle = "bg-slate-100 text-slate-600";
                 let sLabel = app.status || 'waiting';
                 const baseS = sLabel.replace('_closed', '');
-                
-                if(baseS === 'verified') badgeStyle = "bg-emerald-100 text-emerald-700";
-                else if(baseS === 'pending') badgeStyle = "bg-amber-100 text-amber-700";
-                else if(baseS === 'no_show') badgeStyle = "bg-red-100 text-red-700";
-                else if(baseS === 'cancelled') badgeStyle = "bg-slate-100 text-slate-500 line-through";
-                else if(baseS === 'current') badgeStyle = "bg-blue-100 text-blue-700";
+
+                if (baseS === 'verified') badgeStyle = "bg-emerald-100 text-emerald-700";
+                else if (baseS === 'pending') badgeStyle = "bg-amber-100 text-amber-700";
+                else if (baseS === 'no_show') badgeStyle = "bg-red-100 text-red-700";
+                else if (baseS === 'cancelled') badgeStyle = "bg-slate-100 text-slate-500 line-through";
+                else if (baseS === 'current') badgeStyle = "bg-blue-100 text-blue-700";
 
                 tbody.innerHTML += `
                     <tr class="hover:bg-slate-50 transition-colors">
@@ -1229,7 +1288,7 @@ async function openStudentDetailsModal(student) {
         const extraAttempts = student.extraAttempts || 0;
         const limit = 3 + extraAttempts;
         const left = Math.max(0, limit - usedAttempts);
-        
+
         document.getElementById('modalAttemptsInfo').innerHTML = `
             <span class="${left === 0 ? 'text-red-500' : 'text-emerald-600'}">${left} Left</span> 
             <span class="text-sm text-slate-500 font-medium">/ ${limit} Allowed</span>
@@ -1242,7 +1301,7 @@ async function openStudentDetailsModal(student) {
         pendingDocsEl.classList.add('hidden');
         pendingDocsEl.innerHTML = '';
 
-        const latestApp = apps[0]; 
+        const latestApp = apps[0];
         if (!latestApp) {
             statusEl.innerHTML = `<span class="text-slate-500">Not Booked Yet</span>`;
         } else {
@@ -1251,11 +1310,11 @@ async function openStudentDetailsModal(student) {
                 statusEl.innerHTML = `<span class="text-emerald-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> Verified</span>`;
             } else if (baseStatus === 'pending') {
                 statusEl.innerHTML = `<span class="text-amber-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Pending Documents</span>`;
-                
+
                 const req = scholarshipDocs[student.scholarshipType] || [];
                 const ver = latestApp.documentVerification || {};
                 const missing = req.filter(d => !ver[d]);
-                
+
                 if (missing.length > 0) {
                     pendingDocsEl.classList.remove('hidden');
                     pendingDocsEl.innerHTML = `<span class="font-bold uppercase tracking-wider text-[10px] block mb-1">Missing Documents:</span> • ${missing.join('<br> • ')}`;
@@ -1271,7 +1330,7 @@ async function openStudentDetailsModal(student) {
 
         document.getElementById('studentDetailsModal').classList.remove('hidden');
 
-    } catch(e) {
+    } catch (e) {
         showToast("Error loading student history");
     }
 }
@@ -1283,16 +1342,16 @@ function closeStudentDetailsModal() {
 
 async function grantExtraAttempts() {
     if (!activeModalStudentUid) return;
-    
+
     try {
         const userRef = db.collection('users').doc(activeModalStudentUid);
         await userRef.update({
             extraAttempts: firebase.firestore.FieldValue.increment(3)
         });
-        
+
         showToast("Success! Account Unlocked & Attempts Granted.");
         closeStudentDetailsModal();
-        loadStudentDirectory(); 
+        loadStudentDirectory();
     } catch (e) {
         showToast("Error updating student record.");
     }
@@ -1308,10 +1367,10 @@ async function loadStatsData() {
 
         const snap = await db.collection('appointments').get();
         allAppointmentsData = [];
-        
+
         snap.forEach(doc => {
             const appData = doc.data();
-            const userData = usersMap[appData.uid] || {}; 
+            const userData = usersMap[appData.uid] || {};
 
             allAppointmentsData.push({
                 id: doc.id,
@@ -1322,12 +1381,12 @@ async function loadStatsData() {
                 contactNo: appData.contactNo || userData.contactNo || 'N/A'
             });
         });
-        
+
         allAppointmentsData.sort((a, b) => {
             if (a.date !== b.date) return (b.date || "").localeCompare(a.date || "");
-            return (b.time || "").localeCompare(a.time || "");
+            return parseTime(a.time) - parseTime(b.time);
         });
-        
+
         applyFilters();
     } catch (e) {
         console.error("Error loading stats:", e);
@@ -1349,7 +1408,7 @@ function applyFilters() {
 
         if (fDept !== 'ALL' && app.department !== fDept) match = false;
         if (fYear !== 'ALL' && String(app.currentYear) !== String(fYear)) match = false;
-        
+
         if (fStatus !== 'ALL') {
             const baseStatus = app.status ? app.status.replace('_closed', '') : '';
             if (baseStatus !== fStatus) match = false;
@@ -1359,7 +1418,7 @@ function applyFilters() {
             if (app.date !== fDate) match = false;
         } else if (fTimeRange !== 'ALL') {
             const appDate = new Date(app.date);
-            
+
             if (fTimeRange === 'TODAY') {
                 if (app.date !== today.toISOString().split('T')[0]) match = false;
             } else if (fTimeRange === 'WEEK') {
@@ -1401,16 +1460,16 @@ function applyFilters() {
     filtered.forEach(app => {
         const tr = document.createElement('tr');
         tr.className = "hover:bg-slate-50 transition-colors";
-        
+
         let badgeStyle = "bg-slate-100 text-slate-600";
         let sLabel = app.status || 'waiting';
         const baseS = sLabel.replace('_closed', '');
-        
-        if(baseS === 'verified') badgeStyle = "bg-emerald-100 text-emerald-700";
-        else if(baseS === 'pending') badgeStyle = "bg-amber-100 text-amber-700";
-        else if(baseS === 'no_show') badgeStyle = "bg-red-100 text-red-700";
-        else if(baseS === 'cancelled') badgeStyle = "bg-slate-200 text-slate-500";
-        else if(baseS === 'current') badgeStyle = "bg-blue-100 text-blue-700";
+
+        if (baseS === 'verified') badgeStyle = "bg-emerald-100 text-emerald-700";
+        else if (baseS === 'pending') badgeStyle = "bg-amber-100 text-amber-700";
+        else if (baseS === 'no_show') badgeStyle = "bg-red-100 text-red-700";
+        else if (baseS === 'cancelled') badgeStyle = "bg-slate-200 text-slate-500";
+        else if (baseS === 'current') badgeStyle = "bg-blue-100 text-blue-700";
 
         tr.innerHTML = `
             <td class="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">${app.date} <span class="text-xs text-slate-400 block">${app.time}</span></td>
@@ -1433,7 +1492,6 @@ function downloadCSV() {
     const data = window.currentFilteredData || [];
     if (data.length === 0) return showToast("No data to export!");
 
-    // Added the new "Pending Documents" column to the CSV Header!
     let csvContent = "Date,Time,Token,Student Name,Email,Contact No,GR Number,Department,Joining Year,Current Year,MahaDBT ID,Category,Status,Pending Documents\n";
 
     data.forEach(app => {
@@ -1451,22 +1509,19 @@ function downloadCSV() {
         const cat = app.scholarshipType || "";
         const stat = (app.status || "").replace('_closed', '').toUpperCase();
 
-        // NEW: Calculate missing documents if the status is pending
         let pendingDocsStr = "";
         const baseStatus = (app.status || "").replace('_closed', '');
-        
+
         if (baseStatus === 'pending') {
             const req = scholarshipDocs[app.scholarshipType] || [];
             const ver = app.documentVerification || {};
             const missing = req.filter(d => !ver[d]);
-            
-            // Wrap the list in double quotes so Excel keeps it inside a single cell
+
             if (missing.length > 0) {
-                pendingDocsStr = `"${missing.join(', ')}"`; 
+                pendingDocsStr = `"${missing.join(', ')}"`;
             }
         }
 
-        // Add the new pendingDocsStr to the end of the row
         csvContent += `${date},${time},${token},${name},${email},${phone},${gr},${dept},${joinYr},${currYr},${dbt},${cat},${stat},${pendingDocsStr}\n`;
     });
 
@@ -1497,12 +1552,12 @@ function restrictDateToDepartmentDay() {
 
     if (dayDisplay) dayDisplay.textContent = `${deptInfo.name}s Only`;
     dateSelect.innerHTML = `<option value="">Select an upcoming ${deptInfo.name}</option>`;
-    
+
     const today = new Date();
     const currentHour = today.getHours();
     let found = 0;
     let checkDate = new Date(today);
-    let safetyCounter = 0; 
+    let safetyCounter = 0;
 
     while (found < 3 && safetyCounter < 50) {
         safetyCounter++;
@@ -1523,7 +1578,7 @@ function restrictDateToDepartmentDay() {
 
     if (found === 0) dateSelect.innerHTML = `<option value="">No dates available</option>`;
 
-    dateSelect.onchange = async function() {
+    dateSelect.onchange = async function () {
         if (!dateSelect.value) return;
         const selectedDate = new Date(dateSelect.value);
         const openingTime = new Date(selectedDate);
@@ -1550,7 +1605,7 @@ async function generateAvailableTimeSlots(selectedDate) {
     try {
         const snapshot = await db.collection('appointments').where('date', '==', selectedDate).get();
         const bookedTimes = [];
-        
+
         snapshot.forEach(doc => {
             if (doc.data().status !== 'cancelled') {
                 bookedTimes.push(doc.data().time);
@@ -1559,11 +1614,10 @@ async function generateAvailableTimeSlots(selectedDate) {
 
         select.innerHTML = '<option value="">Select a 7-min slot</option>';
         let time = new Date();
-        time.setHours(9, 30, 0, 0); 
-        const bookingEnd = 23; // RESTORED TO 11:00 PM FOR TESTING!
-        let safetyCounter = 0; 
-        
-        // Get current exact time and parse the selected date safely
+        time.setHours(9, 30, 0, 0);
+        const bookingEnd = 23;
+        let safetyCounter = 0;
+
         const now = new Date();
         const [selYear, selMonth, selDay] = selectedDate.split('-').map(Number);
 
@@ -1571,33 +1625,31 @@ async function generateAvailableTimeSlots(selectedDate) {
             safetyCounter++;
             if (time.getHours() === 13) { time.setHours(14, 0, 0, 0); continue; }
             const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-            
-            // Calculate the exact timestamp for THIS specific slot to check if it has passed
+            let endTime = new Date(time);
+            endTime.setMinutes(endTime.getMinutes() + 7);
+            if (endTime.getHours() >= bookingEnd && endTime.getMinutes() > 0) break;
+
             const slotDateTime = new Date(selYear, selMonth - 1, selDay, time.getHours(), time.getMinutes(), 0, 0);
-            
+
             const isBooked = bookedTimes.includes(timeStr);
-            const isPast = slotDateTime < now; // Check if slot is in the past
+            const isPast = slotDateTime < now;
 
             const option = document.createElement('option');
             option.value = timeStr;
-            
+
             if (isBooked) {
                 option.textContent = `${timeStr} (BOOKED)`;
                 option.disabled = true;
                 option.className = "text-slate-300 bg-slate-50 italic";
             } else if (isPast) {
-                // Grey out and disable passed time slots
                 option.textContent = `${timeStr} (PASSED)`;
                 option.disabled = true;
                 option.className = "text-slate-300 bg-slate-50 italic opacity-60";
             } else {
                 option.textContent = timeStr;
             }
-            
             select.appendChild(option);
-            
-            // Advance clock by 7 minutes for the next loop
-            time.setMinutes(time.getMinutes() + 7); 
+            time.setMinutes(time.getMinutes() + 7);
         }
     } catch (error) { showToast("Error checking availability."); }
 }
@@ -1606,40 +1658,39 @@ async function bookSlot() {
     const d = document.getElementById('slotDate').value;
     const t = document.getElementById('slotTime').value;
     if (!d || !t) return showToast("Pick Date and Time");
-    
+
     try {
         const snap = await db.collection('appointments').where('uid', '==', currentUser.uid).get();
         let pastApps = [];
         snap.forEach(doc => pastApps.push(doc.data()));
-        
+
         const extraAttempts = currentUser.extraAttempts || 0;
-        
         const activeOrCompletedApps = pastApps.filter(app => app.status !== 'cancelled');
         const limit = 3 + extraAttempts;
 
         if (activeOrCompletedApps.length >= limit) {
             return showToast("Booking limit exceeded! Please visit Admin.");
         }
-        
+
         if (pastApps.some(app => app.date === d && app.status !== 'cancelled')) {
             return showToast("You already have an active booking on this date!");
         }
 
         const correctToken = getSlotTokenNumber(t);
         await db.collection('appointments').add({
-            uid: currentUser.uid, 
-            name: currentUser.name, 
-            email: currentUser.email, 
-            contactNo: currentUser.contactNo, 
-            joiningYear: currentUser.joiningYear, 
-            currentYear: currentUser.currentYear, 
+            uid: currentUser.uid,
+            name: currentUser.name,
+            email: currentUser.email,
+            contactNo: currentUser.contactNo,
+            joiningYear: currentUser.joiningYear,
+            currentYear: currentUser.currentYear,
             scholarshipType: currentUser.scholarshipType,
-            grNumber: currentUser.grNumber, 
-            mahadbtId: currentUser.mahadbtId, 
+            grNumber: currentUser.grNumber,
+            mahadbtId: currentUser.mahadbtId,
             department: currentUser.department,
-            date: d, 
-            time: t, 
-            status: 'waiting', 
+            date: d,
+            time: t,
+            status: 'waiting',
             token: correctToken
         });
         showToast(`Slot Booked! Your Token is ${correctToken}`);
@@ -1650,13 +1701,13 @@ async function bookSlot() {
 window.setUserType = setUserType;
 window.setAuthMode = setAuthMode;
 window.handleAuth = handleAuth;
-window.showAdminDashboard = showAdminDashboard; 
+window.showAdminDashboard = showAdminDashboard;
 window.logout = () => location.reload();
 window.bookSlot = bookSlot;
 window.nextToken = nextToken;
 window.togglePause = togglePause;
-window.addExtraTime = addExtraTime; 
-window.resetQueueDelay = resetQueueDelay; 
+window.addExtraTime = addExtraTime;
+window.resetQueueDelay = resetQueueDelay;
 window.updateDocumentStatus = updateDocumentStatus;
 window.toggleEditProfile = () => {
     document.getElementById('editMahadbtId').value = currentUser.mahadbtId;
@@ -1674,7 +1725,7 @@ window.saveProfileUpdate = async () => {
 window.toggleLiveQueue = () => document.getElementById('liveQueueSection').classList.toggle('hidden');
 window.closeUpdateModal = () => document.getElementById('updateProfileModal').classList.add('hidden');
 window.updateActiveStatus = updateActiveStatus;
-window.manualStartTimer = manualStartTimer; 
+window.manualStartTimer = manualStartTimer;
 window.applyFilters = applyFilters;
 window.downloadCSV = downloadCSV;
 window.toggleAdminView = toggleAdminView;

@@ -42,9 +42,9 @@ const deptToDay = {
     'AIML': { day: 2, name: 'Tuesday' },
     'COMP': { day: 3, name: 'Wednesday' },
     'IT': { day: 5, name: 'Friday' },
-    'MECH': { day: 6, name: 'Saturday' },
-    'CIVIL': { day: 6, name: 'Saturday' },
-    'AUTOMOBILE': { day: 6, name: 'Saturday' }
+    'MECH': { day: 0, name: 'Sunday' },
+    'CIVIL': { day: 0, name: 'Sunday' },
+    'AUTOMOBILE': { day: 0, name: 'Sunday' }
 };
 
 // ==================== HELPER FUNCTIONS ====================
@@ -1672,15 +1672,29 @@ async function bookSlot() {
         snap.forEach(doc => pastApps.push(doc.data()));
 
         const extraAttempts = currentUser.extraAttempts || 0;
-        const activeOrCompletedApps = pastApps.filter(app => app.status !== 'cancelled');
+
+        // Any status that isn't 'cancelled' officially consumes 1 of their 3 attempts.
+        // This guarantees that "no_show" and "pending" strictly reduce their limit.
+        const usedAttempts = pastApps.filter(app => app.status !== 'cancelled').length;
         const limit = 3 + extraAttempts;
 
-        if (activeOrCompletedApps.length >= limit) {
+        if (usedAttempts >= limit) {
             return showToast("Booking limit exceeded! Please visit Admin.");
         }
 
-        if (pastApps.some(app => app.date === d && app.status !== 'cancelled')) {
-            return showToast("You already have an active booking on this date!");
+        // Failsafe: Prevent verified users from booking again
+        if (pastApps.some(app => String(app.status).includes('verified'))) {
+            return showToast("You are already verified for this academic year!");
+        }
+
+        // FIX: Only block if they have an ACTIVE appointment right now. 
+        // This unlocks same-day re-booking for 'pending' or 'no_show' cases!
+        const hasActiveBooking = pastApps.some(app =>
+            app.date === d && ['waiting', 'current'].includes(app.status)
+        );
+
+        if (hasActiveBooking) {
+            return showToast("You already have an active waiting slot!");
         }
 
         const correctToken = getSlotTokenNumber(t);
@@ -1701,7 +1715,9 @@ async function bookSlot() {
             token: correctToken
         });
         showToast(`Slot Booked! Your Token is ${correctToken}`);
-    } catch (e) { showToast("Booking Failed"); }
+    } catch (e) {
+        showToast("Booking Failed");
+    }
 }
 
 // ==================== WINDOW EXPORTS ====================

@@ -1667,6 +1667,29 @@ async function bookSlot() {
     if (!d || !t) return showToast("Pick Date and Time");
 
     try {
+        // --- FIX 1: THE ANTI-COLLISION PRE-FLIGHT CHECK ---
+        // Before checking the user, query the entire DB to see if ANYONE just took this exact slot
+        const slotCheckSnap = await db.collection('appointments')
+            .where('date', '==', d)
+            .where('time', '==', t)
+            .get();
+
+        let isSlotTaken = false;
+        slotCheckSnap.forEach(doc => {
+            // If a document exists for this time and it isn't cancelled, the slot is gone!
+            if (doc.data().status !== 'cancelled') {
+                isSlotTaken = true;
+            }
+        });
+
+        if (isSlotTaken) {
+            // Refresh their dropdown automatically to remove the stolen slot
+            generateAvailableTimeSlots(d);
+            return showToast("Oops! Someone just booked this exact slot. Please pick another.");
+        }
+        // --------------------------------------------------
+
+        // FIX 2: Normal User Limit Checks
         const snap = await db.collection('appointments').where('uid', '==', currentUser.uid).get();
         let pastApps = [];
         snap.forEach(doc => pastApps.push(doc.data()));
@@ -1674,7 +1697,6 @@ async function bookSlot() {
         const extraAttempts = currentUser.extraAttempts || 0;
 
         // Any status that isn't 'cancelled' officially consumes 1 of their 3 attempts.
-        // This guarantees that "no_show" and "pending" strictly reduce their limit.
         const usedAttempts = pastApps.filter(app => app.status !== 'cancelled').length;
         const limit = 3 + extraAttempts;
 
@@ -1687,8 +1709,7 @@ async function bookSlot() {
             return showToast("You are already verified for this academic year!");
         }
 
-        // FIX: Only block if they have an ACTIVE appointment right now. 
-        // This unlocks same-day re-booking for 'pending' or 'no_show' cases!
+        // Only block if they have an ACTIVE appointment right now. 
         const hasActiveBooking = pastApps.some(app =>
             app.date === d && ['waiting', 'current'].includes(app.status)
         );
@@ -1697,6 +1718,7 @@ async function bookSlot() {
             return showToast("You already have an active waiting slot!");
         }
 
+        // 3. Book the Slot safely
         const correctToken = getSlotTokenNumber(t);
         await db.collection('appointments').add({
             uid: currentUser.uid,

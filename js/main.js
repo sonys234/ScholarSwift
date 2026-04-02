@@ -22,15 +22,58 @@ window.inAppNotifs = [];
 window.notifState = {};
 window.currentStudentActiveApp = null;
 window.currentActiveTokenData = null;
+window.systemAcademicYear = "2025-2026";
+window.isMahadbtWindowOpen = false;
 
 const scholarshipDocs = {
-    'EBC': ['Income Certificate', 'Domicile Certificate', 'Mark Sheet', 'Fee Receipt', 'Ration Card'],
-    'OBC': ['Caste Certificate', 'Caste Validity', 'Non-Creamy Layer', 'Income Certificate', 'Mark Sheet'],
-    'SC': ['Caste Certificate', 'Caste Validity', 'Income Certificate (Form 16)', 'Mark Sheet', 'Hostel Certificate'],
-    'ST': ['Caste Certificate', 'Caste Validity', 'Tribe Validity', 'Income Certificate', 'Mark Sheet'],
-    'VJNT': ['Caste Certificate', 'Non-Creamy Layer', 'Income Certificate', 'Domicile', 'Mark Sheet'],
-    'EWS': ['EWS Eligibility Certificate', 'Income Certificate', 'Domicile Certificate', 'Mark Sheet', 'Leaving Certificate'],
-    'Minority': ['Self Declaration', 'Income Certificate', 'Domicile', 'Mark Sheet', 'Admission Receipt']
+    'SC': [
+        'Aadhaar Card', 'Bank Passbook', 'Photo', 'Signature', 'Domicile Certificate',
+        'Income Certificate', 'Caste Certificate', 'Caste Validity Certificate',
+        'SSC Marksheet', 'HSC Marksheet', 'Previous Year Marksheet',
+        'Leaving Certificate', 'Bonafide Certificate', 'Fee Receipt',
+        'CAP Allotment Letter', 'Gap Certificate', 'Hostel Certificate',
+        'Ration Card', 'Parent Death Certificate', 'Family Declaration'
+    ],
+    'ST': [
+        'Aadhaar Card', 'Bank Passbook', 'Photo', 'Signature', 'Domicile Certificate',
+        'Income Certificate', 'Caste Certificate', 'Caste Validity Certificate',
+        'SSC Marksheet', 'HSC Marksheet', 'Previous Year Marksheet',
+        'Leaving Certificate', 'Bonafide Certificate', 'Fee Receipt',
+        'CAP Allotment Letter', 'Gap Certificate', 'Hostel Certificate',
+        'Ration Card', 'Family Declaration'
+    ],
+    'OBC': [
+        'Aadhaar Card', 'Bank Passbook', 'Photo', 'Signature', 'Domicile Certificate',
+        'Income Certificate', 'Caste Certificate', 'Non-Creamy Layer',
+        'SSC Marksheet', 'HSC Marksheet', 'Previous Year Marksheet',
+        'Leaving Certificate', 'Bonafide Certificate', 'Fee Receipt',
+        'CAP Allotment Letter', 'Gap Certificate', 'Ration Card', 'Parent Death Certificate'
+    ],
+    'VJNT': [
+        'Aadhaar Card', 'Bank Passbook', 'Photo', 'Signature', 'Domicile Certificate',
+        'Income Certificate', 'Caste Certificate', 'Caste Validity Certificate',
+        'SSC Marksheet', 'HSC Marksheet', 'Previous Year Marksheet',
+        'Leaving Certificate', 'Bonafide Certificate', 'Fee Receipt',
+        'CAP Allotment Letter', 'Gap Certificate', 'Ration Card', 'Family Declaration'
+    ],
+    'EWS': [
+        'Aadhaar Card', 'Bank Passbook', 'Photo', 'Signature', 'Domicile Certificate',
+        'Income Certificate', 'SSC Marksheet', 'HSC Marksheet', 'Previous Year Marksheet',
+        'Leaving Certificate', 'Bonafide Certificate', 'Fee Receipt',
+        'CAP Allotment Letter', 'Gap Certificate', 'Ration Card', 'Self Declaration'
+    ],
+    'EBC': [
+        'Aadhaar Card', 'Bank Passbook', 'Photo', 'Signature', 'Domicile Certificate',
+        'Income Certificate', 'SSC Marksheet', 'HSC Marksheet', 'Previous Year Marksheet',
+        'Leaving Certificate', 'Bonafide Certificate', 'Fee Receipt',
+        'CAP Allotment Letter', 'Gap Certificate', 'Ration Card', 'Self Declaration'
+    ],
+    'Minority': [
+        'Aadhaar Card', 'Bank Passbook', 'Photo', 'Signature', 'Domicile Certificate',
+        'Income Certificate', 'Minority Declaration', 'SSC Marksheet', 'HSC Marksheet',
+        'Previous Year Marksheet', 'Leaving Certificate', 'Bonafide Certificate', 'Fee Receipt',
+        'CAP Allotment Letter', 'Gap Certificate', 'Ration Card', 'PAN Card', 'Parent Declaration'
+    ]
 };
 
 const yearLabels = {
@@ -41,10 +84,10 @@ const deptToDay = {
     'DS': { day: 1, name: 'Monday' },
     'AIML': { day: 2, name: 'Tuesday' },
     'COMP': { day: 3, name: 'Wednesday' },
-    'IT': { day: 5, name: 'Friday' },
-    'MECH': { day: 0, name: 'Sunday' },
-    'CIVIL': { day: 0, name: 'Sunday' },
-    'AUTOMOBILE': { day: 0, name: 'Sunday' }
+    'IT': { day: 4, name: 'Thursday' }, // Fixed: Moved from Friday to Thursday
+    'MECH': { day: 5, name: 'Friday' }, // Fixed: Moved from Saturday to Friday
+    'CIVIL': { day: 5, name: 'Friday' }, // Fixed: Moved from Saturday to Friday
+    'AUTOMOBILE': { day: 5, name: 'Friday' } // Fixed: Moved from Saturday to Friday
 };
 
 // ==================== HELPER FUNCTIONS ====================
@@ -97,8 +140,7 @@ function getSlotTokenNumber(selectedTimeStr) {
     return tokenIndex;
 }
 
-
-// NEW: Proper numerical time sorting function
+// Proper numerical time sorting function
 function parseTime(timeStr) {
     if (!timeStr || timeStr === "--:--") return 0;
     const parts = timeStr.trim().split(/\s+/);
@@ -110,7 +152,7 @@ function parseTime(timeStr) {
     return hours * 60 + minutes;
 }
 
-// NEW: Centralized Master Delay Calculation Engine for BOTH views
+// Centralized Master Delay Calculation Engine for BOTH views
 function getMasterDelay() {
     const now = new Date();
     let masterDelay = globalDelayMinutes;
@@ -138,7 +180,6 @@ function initApp() {
     listenToQueueSettings();
     console.log('🚀 ScholarSwift initialized');
 }
-
 
 function startLiveClock() {
     const updateTime = () => {
@@ -246,7 +287,6 @@ function startLiveClock() {
 }
 
 function listenToQueueSettings() {
-    // 1. Listen for manual queue delays and pauses
     db.collection('settings').doc('queueStatus').onSnapshot(doc => {
         if (doc.exists) {
             const data = doc.data();
@@ -261,7 +301,45 @@ function listenToQueueSettings() {
         }
     });
 
-    // 2. Universal Active Token Listener
+    // Listen to System Lifecycle Settings
+    db.collection('settings').doc('lifecycle').onSnapshot(doc => {
+        let data = {};
+        if (doc.exists) {
+            data = doc.data();
+        } else {
+            // Auto-initialize the database document if it doesn't exist yet
+            data = { academicYear: "2025-2026", mahadbtWindowOpen: false };
+            db.collection('settings').doc('lifecycle').set(data);
+        }
+
+        window.systemAcademicYear = data.academicYear || "2025-2026";
+        window.isMahadbtWindowOpen = data.mahadbtWindowOpen || false;
+
+        // Update Admin UI
+        const yearDisplay = document.getElementById('adminSystemYearDisplay');
+        if (yearDisplay) yearDisplay.textContent = window.systemAcademicYear;
+
+        const windowStatus = document.getElementById('adminMahadbtWindowStatus');
+        const windowBtn = document.getElementById('adminMahadbtWindowBtn');
+        if (windowStatus && windowBtn) {
+            if (window.isMahadbtWindowOpen) {
+                windowStatus.innerHTML = `<span class="text-emerald-600 bg-emerald-100 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest">Open</span>`;
+                windowBtn.textContent = "Close Update Window";
+                windowBtn.className = "px-4 py-2 bg-red-100 text-red-600 text-xs font-bold rounded-lg hover:bg-red-200 transition-all shadow-sm";
+            } else {
+                windowStatus.innerHTML = `<span class="text-slate-500 bg-slate-200 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest">Closed</span>`;
+                windowBtn.textContent = "Open Update Window";
+                windowBtn.className = "px-4 py-2 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-600 transition-all shadow-sm";
+            }
+        }
+
+        // Refresh Student Edit Modal if it's currently open
+        const updateModal = document.getElementById('updateProfileModal');
+        if (updateModal && !updateModal.classList.contains('hidden') && typeof window.toggleEditProfile === 'function') {
+            window.toggleEditProfile();
+        }
+    });
+
     db.collection('appointments').where('status', '==', 'current').limit(1).onSnapshot(snap => {
         if (!snap.empty) {
             window.currentActiveTokenData = snap.docs[0].data();
@@ -271,7 +349,6 @@ function listenToQueueSettings() {
         }
     });
 
-    // 3. Global Queue Head Listener with safe numerical sorting
     const todayStr = new Date().toISOString().split('T')[0];
     db.collection('appointments')
         .where('date', '==', todayStr)
@@ -387,35 +464,21 @@ function setUserType(type) {
     const authTitle = document.getElementById('authTitle');
 
     if (type === 'student') {
-
-        // Student ACTIVE
         studentToggle.classList.add('bg-emerald-500', 'text-white');
         studentToggle.classList.remove('text-slate-400');
-
         authTabs.classList.remove('hidden');
         authTitle.textContent = "Student Login";
-
-        // Admin INACTIVE
         adminToggle.classList.remove('bg-violet-500', 'text-white');
         adminToggle.classList.add('text-slate-400', 'hover:text-white');
-
         if (signupTab) signupTab.classList.remove('hidden');
-
     } else {
-
-        // Admin ACTIVE
         adminToggle.classList.add('bg-violet-500', 'text-white');
         adminToggle.classList.remove('text-slate-400');
-
         authTabs.classList.add('hidden');
         authTitle.textContent = "Admin Login";
-
-        // Student INACTIVE
         studentToggle.classList.remove('bg-emerald-500', 'text-white');
         studentToggle.classList.add('text-slate-400', 'hover:text-white');
-
         if (signupTab) signupTab.classList.add('hidden');
-
         setAuthMode('login');
     }
 }
@@ -423,62 +486,145 @@ function setUserType(type) {
 function setAuthMode(mode) {
     if (currentUserType === 'admin' && mode === 'signup') return;
     authMode = mode;
+    window.currentSignupStep = 1; // Reset 2-Step Sign-up tracker
 
     const loginTab = document.getElementById('loginTab');
     const signupTab = document.getElementById('signupTab');
     const signupExtraFields = document.getElementById('signupExtraFields');
     const authSubmit = document.getElementById('authSubmit');
+    const passwordBlock = document.getElementById('passwordBlock');
+    const passwordInput = document.getElementById('passwordInput');
+    const fetchedDetailsBlock = document.getElementById('fetchedDetailsBlock');
+
+    // Unlock fields if they were locked during step 1
+    document.getElementById('emailInput').readOnly = false;
+    document.getElementById('grNumberInput').readOnly = false;
+    document.getElementById('emailInput').classList.remove('opacity-70', 'bg-slate-50');
+    document.getElementById('grNumberInput').classList.remove('opacity-70', 'bg-slate-50');
 
     if (mode === 'login') {
         if (loginTab) loginTab.classList.add('bg-white', 'shadow', 'text-slate-800');
         if (signupTab) signupTab.classList.remove('bg-white', 'shadow', 'text-slate-800');
         if (signupExtraFields) signupExtraFields.classList.add('hidden');
+        if (fetchedDetailsBlock) fetchedDetailsBlock.classList.add('hidden');
+
+        // Show password for login
+        if (passwordBlock) passwordBlock.classList.remove('hidden');
+        if (passwordInput) passwordInput.required = true;
+
         if (authSubmit) authSubmit.textContent = 'Sign In';
     } else {
         if (signupTab) signupTab.classList.add('bg-white', 'shadow', 'text-slate-800');
         if (loginTab) loginTab.classList.remove('bg-white', 'shadow', 'text-slate-800');
         if (signupExtraFields) signupExtraFields.classList.remove('hidden');
-        if (authSubmit) authSubmit.textContent = 'Create Account';
+        if (fetchedDetailsBlock) fetchedDetailsBlock.classList.add('hidden');
+
+        // Hide password for Step 1 of Sign Up
+        if (passwordBlock) passwordBlock.classList.add('hidden');
+        if (passwordInput) passwordInput.required = false;
+
+        if (authSubmit) authSubmit.textContent = 'Verify Details';
     }
 }
 
 async function handleAuth(event) {
     event.preventDefault();
-    const email = document.getElementById('emailInput').value;
-    const password = document.getElementById('passwordInput').value;
+    const emailInput = document.getElementById('emailInput');
+    const email = emailInput.value.toLowerCase().trim();
+    const passwordInput = document.getElementById('passwordInput');
+    const password = passwordInput.value;
     const errorDiv = document.getElementById('authError');
     errorDiv.classList.add('hidden');
 
     try {
         if (currentUserType === 'student') {
             if (authMode === 'signup') {
-                const firstName = document.getElementById('firstNameInput').value;
-                const lastName = document.getElementById('lastNameInput').value;
                 const contactNo = document.getElementById('contactInput').value;
-                const grNumber = document.getElementById('grNumberInput').value;
-                const dept = document.getElementById('deptSelect').value;
-                const joiningYear = document.getElementById('joiningYearInput').value;
-                const currentYear = document.getElementById('currentYearInput').value;
-                const mahadbtId = document.getElementById('mahadbtIdInput').value;
-                const scholarshipType = document.getElementById('scholarshipTypeInput').value;
+                const grInput = document.getElementById('grNumberInput');
+                const grNumber = grInput.value.toUpperCase().trim();
+                const mahadbtId = document.getElementById('mahadbtIdInput').value.trim();
 
-                if (!firstName || !dept || !grNumber || !joiningYear) throw new Error("Fill all required fields!");
+                // --- SIGN-UP STEP 1: VERIFY DATA ---
+                if (window.currentSignupStep === 1 || !window.currentSignupStep) {
+                    if (!grNumber || !email) throw new Error("GR Number and Email are required to verify!");
 
-                const scholarId = `${dept}${Math.floor(100 + Math.random() * 900)}`;
-                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                    const masterDoc = await db.collection('master_students').doc(grNumber).get();
+                    if (!masterDoc.exists) {
+                        throw new Error("GR Number not found in official roster. Contact Admin.");
+                    }
 
-                const studentData = {
-                    firstName, lastName, name: `${firstName} ${lastName}`,
-                    email, contactNo, scholarId, department: dept, grNumber: grNumber.toUpperCase(),
-                    joiningYear, currentYear, mahadbtId, scholarshipType, role: 'student',
-                    extraAttempts: 0
-                };
+                    const masterData = masterDoc.data();
+                    if (masterData.isRegistered) {
+                        throw new Error("An account with this GR Number already exists. Please Sign In.");
+                    }
 
-                await db.collection('users').doc(userCredential.user.uid).set(studentData);
-                currentUser = { ...studentData, uid: userCredential.user.uid, type: 'student' };
-                showToast(`Success! Your Scholar ID: ${scholarId}`);
-                showStudentDashboard();
+                    if (masterData.email && masterData.email !== email) {
+                        throw new Error("This Email does not match the official college records for this GR Number.");
+                    }
+
+                    // Success! Show Step 2 (Confirmation & Password)
+                    document.getElementById('fetchedName').textContent = masterData.name;
+                    document.getElementById('fetchedDept').textContent = masterData.department;
+                    document.getElementById('fetchedYear').textContent = yearLabels[masterData.currentYear] || `Year ${masterData.currentYear}`;
+                    document.getElementById('fetchedCategory').textContent = masterData.scholarshipType;
+
+                    document.getElementById('fetchedDetailsBlock').classList.remove('hidden');
+                    document.getElementById('passwordBlock').classList.remove('hidden');
+                    passwordInput.required = true;
+
+                    // Lock the identifying inputs so they can't change them after verification
+                    emailInput.readOnly = true;
+                    grInput.readOnly = true;
+                    emailInput.classList.add('opacity-70', 'bg-slate-50');
+                    grInput.classList.add('opacity-70', 'bg-slate-50');
+
+                    document.getElementById('authSubmit').textContent = 'Confirm & Create Account';
+                    window.currentSignupStep = 2;
+                    window.verifiedMasterData = masterData; // Save temporarily for Step 2
+
+                    return; // Halt execution until they type password and click again
+                }
+                // --- SIGN-UP STEP 2: CREATE ACCOUNT ---
+                else if (window.currentSignupStep === 2) {
+                    if (!mahadbtId || !password) throw new Error("Password and MahaDBT ID are required to complete sign up!");
+
+                    const masterData = window.verifiedMasterData;
+
+                    // Create auth user in Firebase
+                    const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+
+                    // Combine master data with new user data
+                    const studentData = {
+                        uid: userCredential.user.uid,
+                        email: email,
+                        contactNo: contactNo,
+                        mahadbtId: mahadbtId,
+                        grNumber: grNumber,
+                        firstName: masterData.firstName,
+                        lastName: masterData.lastName,
+                        name: masterData.name,
+                        department: masterData.department,
+                        joiningYear: masterData.joiningYear,
+                        currentYear: masterData.currentYear,
+                        scholarshipType: masterData.scholarshipType,
+                        role: 'student',
+                        extraAttempts: 0,
+                        scholarId: `${masterData.department}${Math.floor(100 + Math.random() * 900)}`
+                    };
+
+                    // Save to Users collection
+                    await db.collection('users').doc(userCredential.user.uid).set(studentData);
+
+                    // Mark master roster as registered so it can't be claimed again
+                    await db.collection('master_students').doc(grNumber).update({ isRegistered: true, uid: userCredential.user.uid });
+
+                    currentUser = { ...studentData, type: 'student' };
+                    window.currentSignupStep = 1; // Reset state
+                    showToast(`Success! Account created for ${masterData.name}`);
+                    showStudentDashboard();
+                }
             } else {
+                // Login logic remains same
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 const doc = await db.collection('users').doc(userCredential.user.uid).get();
                 if (doc.exists) {
@@ -487,6 +633,7 @@ async function handleAuth(event) {
                 } else throw new Error("Profile not found!");
             }
         } else {
+            // Admin logic remains same
             const ADMIN_EMAIL = "admin@scholarswift.com";
             const ADMIN_PASS = "admin123";
 
@@ -505,17 +652,20 @@ async function handleAuth(event) {
 }
 
 // ==================== STUDENT DASHBOARD & UI UPDATES ====================
-
 function showStudentDashboard() {
     if (!currentUser) return;
     document.getElementById('authPage').classList.add('hidden');
     document.getElementById('studentDashboard').classList.remove('hidden');
 
+    // Fallback to the current system year if the student's record doesn't have a year stamped yet
+    const displayYear = currentUser.mahadbtYear || window.systemAcademicYear || "2025-2026";
+
     const fields = {
         'studentName': currentUser.name, 'studentKey': currentUser.scholarId,
         'profileName': currentUser.name, 'profileGrNumber': currentUser.grNumber,
         'profileDept': currentUser.department, 'profileYear': yearLabels[currentUser.currentYear] || "Year " + currentUser.currentYear,
-        'profileMahaDBT': currentUser.mahadbtId, 'profileSchType': currentUser.scholarshipType
+        'profileMahaDBT': currentUser.mahadbtId ? `${currentUser.mahadbtId} (${displayYear})` : "--",
+        'profileSchType': currentUser.scholarshipType
     };
 
     for (const [id, value] of Object.entries(fields)) {
@@ -534,11 +684,12 @@ function showStudentDashboard() {
 
             allApps.sort((a, b) => {
                 if (a.date !== b.date) return b.date.localeCompare(a.date);
-                return parseTime(a.time) - parseTime(b.time);
+                // FIX: Sort time DESCENDING so the newest app is always first
+                return parseTime(b.time) - parseTime(a.time);
             });
 
-            // ATTEMPTS MATH 
-            const usedAttempts = allApps.filter(a => a.status !== 'cancelled').length;
+            // FIX: explicitly count ALL apps (including cancellations)
+            const usedAttempts = allApps.length;
             const extraAttempts = currentUser.extraAttempts || 0;
             const attemptsLeft = Math.max(0, (3 + extraAttempts) - usedAttempts);
 
@@ -548,15 +699,12 @@ function showStudentDashboard() {
                 attemptsEl.className = attemptsLeft === 0 ? "font-bold text-red-500 text-lg" : "font-bold text-emerald-600 text-lg";
             }
 
-            // CORE VARIABLES FOR LOGIC
             const isVerified = allApps.some(a => String(a.status).includes('verified'));
             const activeApp = allApps.find(a => ['waiting', 'current'].includes(a.status));
             const lastProcessedApp = allApps.find(a => ['pending', 'pending_closed', 'no_show', 'no_show_closed'].includes(a.status));
 
-            // Sync active app globally for the Live Clock Engine
             window.currentStudentActiveApp = activeApp || null;
 
-            // BANNER UI ELEMENTS
             const banner = document.getElementById('studentStatusBanner');
             const statusText = document.getElementById('overallStatusText');
             const statusSub = document.getElementById('overallStatusSubtext');
@@ -567,7 +715,6 @@ function showStudentDashboard() {
             let subtextHtml = "Please book a slot below to verify your documents.";
             let svg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>`;
 
-            // STEP 1: ESTABLISH CORE ACADEMIC STATUS
             if (isVerified) {
                 bColor = 'border-emerald-500'; iconBg = 'bg-emerald-100'; iconText = 'text-emerald-600';
                 title = "Verified ✓";
@@ -598,7 +745,6 @@ function showStudentDashboard() {
                     title = "Not Verified Yet";
                 }
 
-                // STEP 2: APPEND RECENT ACTIVITY TO SUBTEXT
                 if (activeApp) {
                     bColor = 'border-blue-500'; iconBg = 'bg-blue-100'; iconText = 'text-blue-600';
                     if (!hasPendingDocs) title = "Verification Scheduled";
@@ -612,8 +758,9 @@ function showStudentDashboard() {
 
                     if (latestApp) {
                         const baseLatest = latestApp.status.replace('_closed', '');
+                        // FIX: Updated logic to correctly identify cancellation
                         if (baseLatest === 'cancelled') {
-                            subtextHtml = missingHtml + `<p class="mb-2 text-slate-500 text-sm border-l-2 border-slate-300 pl-2"><em>Note: You cancelled your last appointment. Your free attempt was refunded.</em></p><p class="font-medium text-emerald-600">${promptText}</p>`;
+                            subtextHtml = missingHtml + `<p class="mb-2 text-slate-500 text-sm border-l-2 border-slate-300 pl-2"><em>Note: You cancelled your last appointment. <span class="text-red-500 font-bold">This attempt was deducted from your limit.</span></em></p><p class="font-medium text-emerald-600">${promptText}</p>`;
                         } else if (baseLatest === 'no_show') {
                             subtextHtml = missingHtml + `<p class="mb-2 text-red-500 text-sm border-l-2 border-red-300 pl-2"><em>Note: You missed your last scheduled appointment.</em></p><p class="font-medium text-emerald-600">${promptText}</p>`;
                         } else {
@@ -633,7 +780,6 @@ function showStudentDashboard() {
                 statusIcon.innerHTML = `<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svg}</svg>`;
             }
 
-            // History Render
             const historyBody = document.getElementById('studentHistoryBody');
             if (historyBody) {
                 historyBody.innerHTML = '';
@@ -737,8 +883,6 @@ function showStudentDashboard() {
             }
         });
 }
-
-// ==================== CANCEL BOOKING LOGIC ====================
 function openCancelModal() {
     document.getElementById('cancelConfirmModal').classList.remove('hidden');
 }
@@ -758,7 +902,8 @@ async function confirmCancelBooking() {
         if (!snap.empty) {
             const docId = snap.docs[0].id;
             await db.collection('appointments').doc(docId).update({ status: 'cancelled' });
-            showToast("Appointment Cancelled. Attempt refunded.");
+            showToast("Appointment Cancelled. Attempt deducted.");
+
         }
         closeCancelModal();
     } catch (e) {
@@ -766,6 +911,42 @@ async function confirmCancelBooking() {
     }
 }
 
+function renderDocumentChecklist(student, appointment) {
+    const container = document.getElementById('docChecklist');
+    const progress = document.getElementById('docProgress');
+
+    if (!container || !student || !appointment) return;
+
+    const docs = scholarshipDocs[student.scholarshipType] || [];
+    const verified = appointment.documentVerification || {};
+
+    let verifiedCount = 0;
+
+    container.innerHTML = docs.map(doc => {
+        const isChecked = verified[doc] === true;
+        if (isChecked) verifiedCount++;
+
+        return `
+        <div class="flex items-center justify-between bg-white p-2 rounded-lg border">
+            <span class="text-sm font-medium ${isChecked ? 'text-emerald-600' : 'text-slate-700'}">
+                ${doc}
+            </span>
+            <input 
+                type="checkbox" 
+                ${isChecked ? 'checked' : ''} 
+                onchange="updateDocumentStatus('${appointment.id}','${doc}',this.checked)"
+                class="w-4 h-4 accent-emerald-500 cursor-pointer"
+            >
+        </div>
+        `;
+    }).join('');
+
+    if (progress) {
+        progress.textContent = `${verifiedCount}/${docs.length} Verified`;
+    }
+}
+
+// ==================== ADMIN DASHBOARD ====================
 function showAdminDashboard() {
     document.getElementById('authPage').classList.add('hidden');
     document.getElementById('adminDashboard').classList.remove('hidden');
@@ -774,9 +955,24 @@ function showAdminDashboard() {
 
     toggleAdminView('live');
 
+    // Calculate and display today's department schedule compactly
+    const todayDayNum = new Date().getDay();
+    let todaysDepts = [];
+    for (const [dept, info] of Object.entries(deptToDay)) {
+        if (info.day === todayDayNum) todaysDepts.push(dept);
+    }
+
+    const deptBannerText = document.getElementById('adminTodayDeptText');
+    if (deptBannerText) {
+        if (todaysDepts.length > 0) {
+            deptBannerText.textContent = `TODAY: ${todaysDepts.join(', ')}`;
+        } else {
+            deptBannerText.textContent = `OPEN DAY (ALL)`;
+        }
+    }
+
     const todayStr = new Date().toISOString().split('T')[0];
 
-    // 1. Separate Render Function for Clock-Driven UI updates
     window.renderAdminQueueTable = function () {
         const tbody = document.getElementById('queueTableBody');
         if (!tbody || !window.currentAdminQueueList) return;
@@ -854,21 +1050,29 @@ function showAdminDashboard() {
         tbody.innerHTML = newHtml;
     };
 
-    // 2. Fetch data from DB, save it globally, and trigger first render
     if (window.adminQueueSnapshotObj) window.adminQueueSnapshotObj();
 
     window.adminQueueSnapshotObj = db.collection('appointments').where('date', '==', todayStr)
         .onSnapshot(snap => {
             let list = [];
-            snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+            let waitingCount = 0; // Track the queue
+
+            snap.forEach(doc => {
+                const data = doc.data();
+                list.push({ id: doc.id, ...data });
+                if (data.status === 'waiting') waitingCount++; // Tally up waiting students
+            });
             list.sort((a, b) => parseTime(a.time) - parseTime(b.time));
 
             window.currentAdminQueueList = list;
             window.renderAdminQueueTable();
             refreshActiveStudentDisplay();
+
+            // Instantly update the new UI counter!
+            const queueCounter = document.getElementById('adminPeopleInQueue');
+            if (queueCounter) queueCounter.textContent = waitingCount;
         });
 
-    // 3. UI Auto-Update Loop: Force re-render EVERY 1 SECOND to perfectly match student view
     if (window.adminTableUpdateInterval) clearInterval(window.adminTableUpdateInterval);
     window.adminTableUpdateInterval = setInterval(() => {
         if (!isQueuePaused && window.renderAdminQueueTable) {
@@ -876,18 +1080,16 @@ function showAdminDashboard() {
         }
     }, 1000);
 
-    // 4. CLEANUP: Ensure any old Auto-Call intervals are permanently killed
     if (window.adminAutoCallInterval) {
         clearInterval(window.adminAutoCallInterval);
         window.adminAutoCallInterval = null;
     }
 }
+
 function toggleAdminView(view) {
     const liveView = document.getElementById('adminLiveQueueView');
     const statsView = document.getElementById('adminStatsView');
     const dirView = document.getElementById('adminDirectoryView');
-    const btnViewStats = document.getElementById('btnViewStats');
-    const btnViewDir = document.getElementById('btnViewDirectory');
 
     if (liveView) liveView.classList.add('hidden');
     if (statsView) statsView.classList.add('hidden');
@@ -895,15 +1097,15 @@ function toggleAdminView(view) {
 
     if (view === 'stats') {
         if (statsView) statsView.classList.remove('hidden');
-        loadStatsData();
+        startLiveAnalytics();
     } else if (view === 'directory') {
+        // FIX: Actually unhide the directory and fetch the data!
         if (dirView) dirView.classList.remove('hidden');
         loadStudentDirectory();
     } else {
         if (liveView) liveView.classList.remove('hidden');
     }
 }
-
 async function refreshActiveStudentDisplay() {
     const snap = await db.collection('appointments').where('status', 'in', ['current', 'verified', 'pending', 'no_show']).limit(1).get();
 
@@ -919,7 +1121,12 @@ async function refreshActiveStudentDisplay() {
     const oldFlag = document.getElementById('resultFlag');
     if (oldFlag) oldFlag.remove();
 
-    const actionButtons = document.querySelectorAll("[onclick*='updateActiveStatus']");
+    // FIX: Look for the NEW modal functions to hide the action buttons correctly
+    const actionButtons = document.querySelectorAll(`
+        button[onclick*="openActionConfirmModal('verified')"], 
+        button[onclick*="openActionConfirmModal('pending')"], 
+        button[onclick*="openActionConfirmModal('no_show')"]
+    `);
     actionButtons.forEach(btn => btn.classList.remove('hidden'));
 
     if (!snap.empty) {
@@ -941,28 +1148,30 @@ async function refreshActiveStudentDisplay() {
             isTimerRunning = false;
             const flag = document.createElement('div');
             flag.id = 'resultFlag';
-            flag.className = `absolute top-24 right-8 px-6 py-2 rounded-full font-black text-xl uppercase tracking-widest shadow-md animate-pop text-white z-50`;
+            flag.className = `absolute top-24 right-8 px-6 py-2 rounded-full font-black text-xl uppercase tracking-widest shadow-md animate-pop text-white z-50 flex items-center gap-2`;
 
             if (status === 'verified') {
                 container.classList.add('bg-emerald-50', 'border-emerald-500');
                 flag.classList.add('bg-emerald-500');
-                flag.textContent = '✓ Verified';
+                flag.innerHTML = `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> Verified`;
             } else if (status === 'pending') {
                 container.classList.add('bg-red-50', 'border-red-500');
                 flag.classList.add('bg-red-500');
-                flag.textContent = '⚠ Pending';
+                flag.innerHTML = `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Pending`;
             } else if (status === 'no_show') {
                 container.classList.add('bg-slate-100', 'border-slate-400');
                 flag.classList.add('bg-slate-500');
-                flag.textContent = '∅ No Show';
+                flag.innerHTML = `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg> No Show`;
             }
 
             container.appendChild(flag);
+
+            // Successfully hides the buttons now!
             actionButtons.forEach(btn => btn.classList.add('hidden'));
+
             if (startTimerBtn) startTimerBtn.classList.add('hidden');
             if (sessionCountdown) clearInterval(sessionCountdown);
         } else {
-            // FIX: Auto-Start Timer Logic. No more manual clicking!
             if (!isTimerRunning && status === 'current') {
                 isTimerRunning = true;
                 startSessionTimer(420);
@@ -970,38 +1179,26 @@ async function refreshActiveStudentDisplay() {
                     db.collection('appointments').doc(docRef.id).update({ isProcessing: true });
                 }
             }
-            if (startTimerBtn) startTimerBtn.classList.add('hidden'); // Ensure manual button is gone
+            if (startTimerBtn) startTimerBtn.classList.add('hidden');
         }
 
-        const requiredDocs = scholarshipDocs[data.scholarshipType] || ['Aadhar Card'];
-        const verifiedData = data.documentVerification || {};
-        const verifiedCount = Object.values(verifiedData).filter(val => val === true).length;
+        const studentData = { scholarshipType: data.scholarshipType };
+        const appointmentData = { id: docRef.id, documentVerification: data.documentVerification || {} };
+        renderDocumentChecklist(studentData, appointmentData);
 
-        document.getElementById('docProgress').textContent = `${verifiedCount}/${requiredDocs.length} Verified`;
-
-        checklistDiv.innerHTML = '';
-        requiredDocs.forEach(doc => {
-            const isChecked = verifiedData[doc] === true;
-            const item = document.createElement('div');
-            item.className = `flex items-center gap-3 p-2 rounded-lg border ${isChecked ? 'bg-white border-emerald-200 shadow-sm' : 'border-slate-100'}`;
-            item.innerHTML = `
-                <input type="checkbox" ${isChecked ? 'checked' : ''} 
-                    onchange="updateDocumentStatus('${docRef.id}','${doc}',this.checked)" 
-                    class="w-4 h-4 rounded text-emerald-500 border-slate-300 focus:ring-emerald-500">
-                <span class="text-sm ${isChecked ? 'text-slate-800 font-medium' : 'text-slate-500'}">${doc}</span>
-            `;
-            checklistDiv.appendChild(item);
-        });
     } else {
         isTimerRunning = false;
         document.getElementById('activeStudentName').textContent = "Desk Available";
         document.getElementById('docProgress').textContent = "0/0 Verified";
         if (startTimerBtn) startTimerBtn.classList.add('hidden');
         checklistDiv.innerHTML = `<div class="flex flex-col items-center justify-center py-12 text-center text-slate-300 animate-pulse"><svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><h4 class="font-bold">Queue is Empty</h4></div>`;
+        document.getElementById('adminCurrentToken').textContent = "TOKEN: --";
+        document.getElementById('activeStudentGR').textContent = "--";
+        document.getElementById('activeMahaDBT').textContent = "--";
+        document.getElementById('activeSchType').textContent = "--";
     }
 }
 
-// FIX: Signal to the DB that the Admin has officially started processing
 async function manualStartTimer() {
     isTimerRunning = true;
     const startBtn = document.getElementById('startTimerBtn');
@@ -1039,9 +1236,7 @@ function startSessionTimer(s) {
 
         if (remainingSeconds <= 0) {
             clearInterval(sessionCountdown);
-            // DO NOT set isTimerRunning = false here. They are still at the desk!
             showToast("Slot time exceeded! Auto-adding 5 mins to Queue Delay.");
-
             addExtraTime();
         }
     }, 1000);
@@ -1151,7 +1346,6 @@ async function nextToken() {
         list.sort((a, b) => parseTime(a.data.time) - parseTime(b.data.time));
 
         if (list.length > 0) {
-            // NEW: Instantly flag as Processing so the timer starts immediately
             batch.update(db.collection('appointments').doc(list[0].id), { status: 'current', isProcessing: true });
             remainingSeconds = 420;
             await batch.commit();
@@ -1175,15 +1369,253 @@ function togglePause() {
         startSessionTimer(remainingSeconds);
     }
     db.collection('settings').doc('queueStatus').set({ isPaused: isQueuePaused });
+
+}
+
+// --- ADMIN ACTION CONFIRMATION MODAL ---
+let pendingAdminAction = null;
+
+function openActionConfirmModal(action) {
+    if (action !== 'next') {
+        const name = document.getElementById('activeStudentName').textContent;
+        if (!name || name === "Desk Available" || name === "--") {
+            return showToast("No active student to update.");
+        }
+    }
+
+    pendingAdminAction = action;
+    const modal = document.getElementById('adminActionConfirmModal');
+    const title = document.getElementById('actionModalTitle');
+    const text = document.getElementById('actionModalText');
+    const btn = document.getElementById('actionModalConfirmBtn');
+    const icon = document.getElementById('actionModalIcon');
+
+    if (action === 'verified') {
+        title.textContent = "Verify Student?";
+        text.textContent = "Are you sure all documents are correct? This will mark the student as Verified.";
+        btn.className = "flex-1 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg transition-all";
+        icon.className = "w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4";
+        icon.innerHTML = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>`;
+    } else if (action === 'pending') {
+        title.textContent = "Mark as Pending?";
+        text.textContent = "Are you sure? This will record the student as having missing documents.";
+        btn.className = "flex-1 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg transition-all";
+        icon.className = "w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4";
+        icon.innerHTML = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+    } else if (action === 'no_show') {
+        title.textContent = "Mark as No Show?";
+        text.textContent = "This will penalize the student and deduct an attempt. Proceed?";
+        btn.className = "flex-1 px-6 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl shadow-lg transition-all";
+        icon.className = "w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4";
+        icon.innerHTML = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+    } else if (action === 'next') {
+        title.textContent = "Call Next Case?";
+        text.textContent = "This will finalize the current session and call the next student in queue.";
+        btn.className = "flex-1 px-6 py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-lg transition-all";
+        icon.className = "w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4";
+        icon.innerHTML = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>`;
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeActionConfirmModal() {
+    document.getElementById('adminActionConfirmModal').classList.add('hidden');
+    pendingAdminAction = null;
+}
+
+function executeConfirmedAction() {
+    if (pendingAdminAction === 'next') {
+        nextToken();
+    } else if (pendingAdminAction) {
+        updateActiveStatus(pendingAdminAction);
+    }
+    closeActionConfirmModal();
+}
+
+// ==================== MASTER ROSTER MANAGEMENT (ADMIN) ====================
+
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false });
+
+            if (rows.length < 2) return showToast("Excel file appears empty or invalid.");
+
+            let batch = db.batch();
+            let count = 0;
+
+            for (let i = 1; i < rows.length; i++) {
+                const cols = rows[i];
+                if (!cols || cols.length < 7) continue;
+
+                const grNumber = String(cols[0]).toUpperCase().trim();
+                if (!grNumber || grNumber === 'UNDEFINED') continue;
+
+                const docRef = db.collection('master_students').doc(grNumber);
+
+                batch.set(docRef, {
+                    grNumber: grNumber,
+                    firstName: String(cols[1]).trim(),
+                    lastName: String(cols[2]).trim(),
+                    name: `${String(cols[1]).trim()} ${String(cols[2]).trim()}`,
+                    department: String(cols[3]).toUpperCase().trim(),
+                    joiningYear: String(cols[4]).trim(),
+                    currentYear: String(cols[5]).trim(),
+                    scholarshipType: String(cols[6]).trim(),
+                    email: cols[7] ? String(cols[7]).toLowerCase().trim() : "",
+                    isRegistered: false
+                }, { merge: true });
+
+                count++;
+
+                if (count % 490 === 0) {
+                    await batch.commit();
+                    batch = db.batch();
+                }
+            }
+
+            await batch.commit();
+            showToast(`Successfully uploaded ${count} students to Master Roster!`);
+            document.getElementById('fileInput').value = "";
+            loadStudentDirectory();
+
+        } catch (error) {
+            console.error("Excel Parsing Error: ", error);
+            showToast("Error reading file. Ensure it is a valid Excel spreadsheet.");
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function openAddStudentModal() {
+    document.getElementById('addStudentForm').reset();
+    document.getElementById('addStudentModal').classList.remove('hidden');
+}
+
+function closeAddStudentModal() {
+    document.getElementById('addStudentModal').classList.add('hidden');
+}
+
+async function submitSingleStudent(e) {
+    e.preventDefault();
+    const grNumber = document.getElementById('addGR').value.toUpperCase().trim();
+    const firstName = document.getElementById('addFirstName').value;
+    const lastName = document.getElementById('addLastName').value;
+    const email = document.getElementById('addEmail').value.toLowerCase().trim();
+
+    const studentData = {
+        grNumber: grNumber,
+        firstName: firstName,
+        lastName: lastName,
+        name: `${firstName} ${lastName}`,
+        department: document.getElementById('addDept').value,
+        joiningYear: document.getElementById('addJoinYear').value,
+        currentYear: document.getElementById('addCurrYear').value,
+        scholarshipType: document.getElementById('addSchType').value,
+        email: email,
+        isRegistered: false
+    };
+
+    try {
+        await db.collection('master_students').doc(grNumber).set(studentData, { merge: true });
+        showToast(`Student ${grNumber} added to Master Roster.`);
+        closeAddStudentModal();
+        loadStudentDirectory();
+    } catch (err) {
+        showToast("Error adding student.");
+    }
+}
+
+async function enableAdminEditMode() {
+    if (!activeModalStudentUid) return;
+
+    try {
+        const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
+        if (!doc.exists) return showToast("Student not found in roster.");
+        const data = doc.data();
+
+        document.getElementById('editFirstName').value = data.firstName || '';
+        document.getElementById('editLastName').value = data.lastName || '';
+        document.getElementById('editDept').value = data.department || '';
+        document.getElementById('editJoinYear').value = data.joiningYear || '';
+        document.getElementById('editCurrYear').value = data.currentYear || '';
+        document.getElementById('editSchType').value = data.scholarshipType || '';
+        document.getElementById('editEmail').value = data.email || '';
+
+        document.getElementById('editStudentModal').classList.remove('hidden');
+    } catch (error) {
+        showToast("Error fetching student details.");
+    }
+}
+
+function closeEditStudentModal() {
+    document.getElementById('editStudentModal').classList.add('hidden');
+}
+
+async function submitEditStudent(e) {
+    e.preventDefault();
+    if (!activeModalStudentUid) return;
+
+    const firstName = document.getElementById('editFirstName').value;
+    const lastName = document.getElementById('editLastName').value;
+    const department = document.getElementById('editDept').value;
+    const joiningYear = document.getElementById('editJoinYear').value;
+    const currentYear = document.getElementById('editCurrYear').value;
+    const scholarshipType = document.getElementById('editSchType').value;
+    const email = document.getElementById('editEmail').value.toLowerCase().trim();
+
+    const updatedData = {
+        firstName,
+        lastName,
+        name: `${firstName} ${lastName}`,
+        department,
+        joiningYear,
+        currentYear,
+        scholarshipType,
+        email
+    };
+
+    try {
+        await db.collection('master_students').doc(activeModalStudentUid).update(updatedData);
+
+        const snap = await db.collection('users').where('grNumber', '==', activeModalStudentUid).get();
+        if (!snap.empty) {
+            await db.collection('users').doc(snap.docs[0].id).update(updatedData);
+        }
+
+        showToast("Student details updated successfully!");
+        closeEditStudentModal();
+
+        document.getElementById('modalName').textContent = updatedData.name;
+        document.getElementById('modalEmail').textContent = updatedData.email;
+        document.getElementById('modalDept').textContent = updatedData.department;
+        document.getElementById('modalJoinYr').textContent = updatedData.joiningYear;
+        document.getElementById('modalCurrYr').textContent = yearLabels[updatedData.currentYear] || updatedData.currentYear;
+        document.getElementById('modalSchType').textContent = updatedData.scholarshipType;
+        document.getElementById('modalInitials').textContent = updatedData.firstName.charAt(0).toUpperCase();
+
+        loadStudentDirectory();
+    } catch (err) {
+        showToast("Error updating student.");
+    }
 }
 
 // --- STUDENT DIRECTORY & MASTER PROFILE ENGINE ---
 async function loadStudentDirectory() {
     try {
-        const snap = await db.collection('users').where('role', '==', 'student').get();
+        const snap = await db.collection('master_students').get();
         allStudentsData = [];
         snap.forEach(doc => {
-            allStudentsData.push({ uid: doc.id, ...doc.data() });
+            allStudentsData.push(doc.data());
         });
         filterDirectory();
     } catch (e) {
@@ -1194,10 +1626,18 @@ async function loadStudentDirectory() {
 function filterDirectory() {
     const query = (document.getElementById('dirSearchInput').value || "").toLowerCase();
     const tbody = document.getElementById('directoryTableBody');
-    tbody.innerHTML = '';
+    if (!tbody) return;
+
+    tbody.innerHTML = ''; // Clear the loading text
 
     const filtered = allStudentsData.filter(s => {
-        const str = `${s.name} ${s.grNumber} ${s.email} ${s.mahadbtId} ${s.contactNo}`.toLowerCase();
+        // Bulletproof safety checks in case database fields are missing
+        const safeName = s.name || "";
+        const safeGR = s.grNumber || "";
+        const safeEmail = s.email || "";
+        const safeDept = s.department || "";
+
+        const str = `${safeName} ${safeGR} ${safeEmail} ${safeDept}`.toLowerCase();
         return str.includes(query);
     });
 
@@ -1211,26 +1651,34 @@ function filterDirectory() {
         tr.className = "hover:bg-slate-50 transition-colors cursor-pointer group";
         tr.onclick = () => openStudentDetailsModal(s);
 
+        const statusBadge = s.isRegistered
+            ? `<span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-[10px] font-black uppercase tracking-wider">Registered</span>`
+            : `<span class="px-2 py-1 bg-slate-200 text-slate-600 rounded text-[10px] font-black uppercase tracking-wider">Unregistered</span>`;
+
+        // CRITICAL FIX: Gracefully handle missing names so the avatar doesn't crash the app
+        const safeName = s.name || "Unknown Student";
+        const initial = safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?";
+
         tr.innerHTML = `
             <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center font-black shadow-sm group-hover:bg-violet-500 group-hover:text-white transition-colors">
-                        ${s.name.charAt(0).toUpperCase()}
+                        ${initial}
                     </div>
                     <div>
-                        <p class="font-bold text-slate-800">${s.name}</p>
-                        <p class="text-xs text-slate-500 font-mono mt-0.5">${s.email}</p>
+                        <p class="font-bold text-slate-800">${safeName}</p>
+                        <p class="text-xs text-slate-500 font-mono mt-0.5">${s.email || "No Email"}</p>
                     </div>
                 </div>
             </td>
             <td class="px-6 py-4">
-                <p class="font-bold text-slate-700">${s.grNumber}</p>
+                <p class="font-bold text-slate-700">${s.grNumber || '--'}</p>
                 <div class="text-[10px] uppercase font-bold text-slate-400 mt-1 flex items-center gap-2">
-                    <span>${s.department}</span> • <span>${yearLabels[s.currentYear] || s.currentYear}</span>
+                    <span>${s.department || '--'}</span> • <span>${yearLabels[s.currentYear] || s.currentYear || '--'}</span>
                 </div>
             </td>
             <td class="px-6 py-4 text-center">
-                <button class="px-4 py-2 bg-slate-100 text-slate-600 font-bold text-xs rounded-lg group-hover:bg-slate-800 group-hover:text-white transition-colors">View Profile</button>
+                ${statusBadge}
             </td>
         `;
         tbody.appendChild(tr);
@@ -1238,21 +1686,38 @@ function filterDirectory() {
 }
 
 async function openStudentDetailsModal(student) {
-    activeModalStudentUid = student.uid;
+    activeModalStudentUid = student.grNumber;
 
-    // 1. Populate Basic Info
-    document.getElementById('modalInitials').textContent = student.name.charAt(0).toUpperCase();
-    document.getElementById('modalName').textContent = student.name;
-    document.getElementById('modalEmail').textContent = student.email;
+    // Safety check for corrupt missing names
+    const safeName = student.name || "Unknown Student";
+    document.getElementById('modalInitials').textContent = safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?";
+    document.getElementById('modalName').textContent = safeName;
+
+    document.getElementById('modalEmail').textContent = student.email || "No Email";
     document.getElementById('modalGR').textContent = student.grNumber;
-    document.getElementById('modalPhone').textContent = student.contactNo;
+    document.getElementById('modalPhone').textContent = student.contactNo || "--";
     document.getElementById('modalDept').textContent = student.department;
     document.getElementById('modalJoinYr').textContent = student.joiningYear;
     document.getElementById('modalCurrYr').textContent = yearLabels[student.currentYear] || student.currentYear;
     document.getElementById('modalSchType').textContent = student.scholarshipType;
     document.getElementById('modalMahaDBT').textContent = student.mahadbtId || "Not Provided";
 
-    // 2. Fetch fresh appointment history from Firebase
+    const tbody = document.getElementById('modalHistoryBody');
+    const statusEl = document.getElementById('modalCurrentStatus');
+    const pendingDocsEl = document.getElementById('modalPendingDocs');
+    const attemptsInfo = document.getElementById('modalAttemptsInfo');
+
+    pendingDocsEl.classList.add('hidden');
+    pendingDocsEl.innerHTML = '';
+
+    if (!student.isRegistered || !student.uid) {
+        tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">Student has not created an account yet.</td></tr>`;
+        statusEl.innerHTML = `<span class="text-slate-500 font-bold">Unregistered</span>`;
+        attemptsInfo.innerHTML = `<span class="text-slate-400 text-lg">N/A</span>`;
+        document.getElementById('studentDetailsModal').classList.remove('hidden');
+        return;
+    }
+
     try {
         const snap = await db.collection('appointments').where('uid', '==', student.uid).get();
         let apps = [];
@@ -1260,11 +1725,10 @@ async function openStudentDetailsModal(student) {
 
         apps.sort((a, b) => {
             if (a.date !== b.date) return b.date.localeCompare(a.date);
-            return parseTime(a.time) - parseTime(b.time);
+            // FIX: Keep Admin modal sorting consistent with student view
+            return parseTime(b.time) - parseTime(a.time);
         });
 
-        // 3. Render History Table inside Modal
-        const tbody = document.getElementById('modalHistoryBody');
         tbody.innerHTML = '';
         if (apps.length === 0) {
             tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">No bookings found for this student.</td></tr>`;
@@ -1290,23 +1754,16 @@ async function openStudentDetailsModal(student) {
             });
         }
 
-        // 4. Calculate & Render Attempts (Filter out cancelled)
-        const usedAttempts = apps.filter(a => a.status !== 'cancelled').length;
+        const usedAttempts = apps.length; // Cancelled slots now count against the limit
         const extraAttempts = student.extraAttempts || 0;
         const limit = 3 + extraAttempts;
         const left = Math.max(0, limit - usedAttempts);
 
-        document.getElementById('modalAttemptsInfo').innerHTML = `
+        attemptsInfo.innerHTML = `
             <span class="${left === 0 ? 'text-red-500' : 'text-emerald-600'}">${left} Left</span> 
             <span class="text-sm text-slate-500 font-medium">/ ${limit} Allowed</span>
             <span class="block text-[11px] font-bold text-slate-400 mt-1 uppercase tracking-wider">(${usedAttempts} Used, ${extraAttempts} Extra Granted)</span>
         `;
-
-        // 5. Calculate & Render Latest Validation Status + Missing Docs
-        const statusEl = document.getElementById('modalCurrentStatus');
-        const pendingDocsEl = document.getElementById('modalPendingDocs');
-        pendingDocsEl.classList.add('hidden');
-        pendingDocsEl.innerHTML = '';
 
         const latestApp = apps[0];
         if (!latestApp) {
@@ -1351,8 +1808,18 @@ async function grantExtraAttempts() {
     if (!activeModalStudentUid) return;
 
     try {
-        const userRef = db.collection('users').doc(activeModalStudentUid);
-        await userRef.update({
+        const masterRef = db.collection('master_students').doc(activeModalStudentUid);
+        const doc = await masterRef.get();
+        if (!doc.exists) return;
+
+        const data = doc.data();
+        if (data.uid) {
+            await db.collection('users').doc(data.uid).update({
+                extraAttempts: firebase.firestore.FieldValue.increment(3)
+            });
+        }
+
+        await masterRef.update({
             extraAttempts: firebase.firestore.FieldValue.increment(3)
         });
 
@@ -1364,132 +1831,285 @@ async function grantExtraAttempts() {
     }
 }
 
-async function loadStatsData() {
-    try {
-        const usersSnap = await db.collection('users').get();
-        const usersMap = {};
-        usersSnap.forEach(doc => {
-            usersMap[doc.id] = doc.data();
-        });
+// ==================== REAL-TIME ANALYTICS ENGINE ====================
+// ==================== REAL-TIME ANALYTICS ENGINE ====================
+let liveStatsUnsubscribeMaster = null;
+let liveStatsUnsubscribeApps = null;
+let liveStatsUnsubscribeUsers = null; // NEW
+let rawMasterData = [];
+let rawAppsData = [];
+let rawUsersData = []; // NEW
+window.unifiedCollegeData = [];
 
-        const snap = await db.collection('appointments').get();
-        allAppointmentsData = [];
+function switchReportTab(tab) {
+    const dashBtn = document.getElementById('tabDashboardBtn');
+    const expBtn = document.getElementById('tabExportBtn');
+    const dashSec = document.getElementById('statsDashboardSection');
+    const expSec = document.getElementById('statsExportSection');
 
-        snap.forEach(doc => {
-            const appData = doc.data();
-            const userData = usersMap[appData.uid] || {};
-
-            allAppointmentsData.push({
-                id: doc.id,
-                ...appData,
-                currentYear: appData.currentYear || userData.currentYear || 'N/A',
-                joiningYear: appData.joiningYear || userData.joiningYear || 'N/A',
-                email: appData.email || userData.email || 'N/A',
-                contactNo: appData.contactNo || userData.contactNo || 'N/A'
-            });
-        });
-
-        allAppointmentsData.sort((a, b) => {
-            if (a.date !== b.date) return (b.date || "").localeCompare(a.date || "");
-            return parseTime(a.time) - parseTime(b.time);
-        });
-
-        applyFilters();
-    } catch (e) {
-        console.error("Error loading stats:", e);
-        showToast("Error loading reporting data.");
+    if (tab === 'dashboard') {
+        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
+        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
+        dashSec.classList.remove('hidden');
+        expSec.classList.add('hidden');
+    } else {
+        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
+        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
+        expSec.classList.remove('hidden');
+        dashSec.classList.add('hidden');
+        applyFilters(); // Re-render table
     }
+}
+
+function startLiveAnalytics() {
+    if (liveStatsUnsubscribeMaster) liveStatsUnsubscribeMaster();
+    if (liveStatsUnsubscribeApps) liveStatsUnsubscribeApps();
+    if (liveStatsUnsubscribeUsers) liveStatsUnsubscribeUsers();
+
+    // Listen to Master Roster
+    liveStatsUnsubscribeMaster = db.collection('master_students').onSnapshot(snap => {
+        rawMasterData = [];
+        snap.forEach(doc => rawMasterData.push(doc.data()));
+        processUnifiedAnalytics();
+    });
+
+    // Listen to all Appointments
+    liveStatsUnsubscribeApps = db.collection('appointments').onSnapshot(snap => {
+        rawAppsData = [];
+        snap.forEach(doc => rawAppsData.push({ id: doc.id, ...doc.data() }));
+        processUnifiedAnalytics();
+    });
+
+    // NEW: Listen to Users to pull their actual Phone & MahaDBT IDs!
+    liveStatsUnsubscribeUsers = db.collection('users').where('role', '==', 'student').onSnapshot(snap => {
+        rawUsersData = [];
+        snap.forEach(doc => rawUsersData.push(doc.data()));
+        processUnifiedAnalytics();
+    });
+}
+
+function processUnifiedAnalytics() {
+    const appsByGR = {};
+    rawAppsData.sort((a, b) => {
+        if (a.date !== b.date) return (b.date || "").localeCompare(a.date || "");
+        return parseTime(b.time) - parseTime(a.time);
+    });
+
+    rawAppsData.forEach(app => {
+        if (!appsByGR[app.grNumber] && app.status !== 'cancelled') {
+            appsByGR[app.grNumber] = app;
+        }
+    });
+
+    // NEW: Map user profiles by GR Number
+    const usersByGR = {};
+    rawUsersData.forEach(u => {
+        if (u.grNumber) usersByGR[u.grNumber] = u;
+    });
+
+    window.unifiedCollegeData = rawMasterData.map(student => {
+        const latestApp = appsByGR[student.grNumber];
+        const userProfile = usersByGR[student.grNumber] || {}; // Pull their live profile
+        let trueStatus = "unregistered";
+        let lastActive = "--";
+
+        if (student.isRegistered) {
+            trueStatus = "not_booked";
+            if (latestApp) {
+                trueStatus = latestApp.status.replace('_closed', '');
+                lastActive = `${latestApp.date} ${latestApp.time}`;
+            }
+        }
+
+        return {
+            ...student,
+            // Override master data with their live profile data if they signed up
+            contactNo: userProfile.contactNo || student.contactNo || "",
+            mahadbtId: userProfile.mahadbtId || student.mahadbtId || "",
+            trueStatus: trueStatus,
+            latestApp: latestApp || null,
+            lastActive: lastActive
+        };
+    });
+
+    renderLiveDashboard();
+    applyFilters();
+}
+
+function renderLiveDashboard() {
+    // 6 exact buckets
+    let totals = { roster: 0, unreg: 0, notBooked: 0, booked: 0, verified: 0, pending: 0, noShow: 0 };
+    let deptStats = {};
+
+    window.unifiedCollegeData.forEach(s => {
+        totals.roster++;
+        if (!deptStats[s.department]) {
+            deptStats[s.department] = { total: 0, unreg: 0, notBooked: 0, booked: 0, verified: 0, pending: 0, noShow: 0 };
+        }
+
+        deptStats[s.department].total++;
+
+        // No ambiguity, map directly to trueStatus
+        if (s.trueStatus === 'unregistered') { totals.unreg++; deptStats[s.department].unreg++; }
+        else if (s.trueStatus === 'not_booked') { totals.notBooked++; deptStats[s.department].notBooked++; }
+        else if (s.trueStatus === 'waiting' || s.trueStatus === 'current') { totals.booked++; deptStats[s.department].booked++; }
+        else if (s.trueStatus === 'verified') { totals.verified++; deptStats[s.department].verified++; }
+        else if (s.trueStatus === 'pending') { totals.pending++; deptStats[s.department].pending++; }
+        else if (s.trueStatus === 'no_show') { totals.noShow++; deptStats[s.department].noShow++; }
+    });
+
+    // Update Global Cards
+    if (document.getElementById('dashTotal')) {
+        document.getElementById('dashTotal').textContent = totals.roster;
+        document.getElementById('dashVerified').textContent = totals.verified;
+        document.getElementById('dashBooked').textContent = totals.booked;
+        document.getElementById('dashNotBooked').textContent = totals.notBooked;
+        document.getElementById('dashPending').textContent = totals.pending;
+        document.getElementById('dashNoShow').textContent = totals.noShow;
+        document.getElementById('dashUnregistered').textContent = totals.unreg;
+    }
+
+    // Render Department Grid
+    const grid = document.getElementById('departmentStatsGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    Object.keys(deptStats).sort().forEach(dept => {
+        const d = deptStats[dept];
+        const progress = Math.round((d.verified / d.total) * 100) || 0;
+
+        grid.innerHTML += `
+            <div class="bg-white rounded-3xl p-6 shadow-md border border-slate-200 flex flex-col h-full hover:shadow-lg transition-shadow">
+                <div class="flex justify-between items-center mb-6">
+                    <h4 class="font-black text-slate-800 text-2xl">${dept}</h4>
+                    <span class="text-sm font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">${d.total} Total</span>
+                </div>
+                
+                <div class="w-full bg-slate-100 h-3 rounded-full mb-6 overflow-hidden">
+                    <div class="bg-emerald-500 h-full rounded-full" style="width: ${progress}%"></div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 mt-auto">
+                    <div class="flex flex-col p-3 rounded-xl bg-emerald-50 border border-emerald-100">
+                        <span class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Verified</span>
+                        <span class="text-2xl font-black text-emerald-700">${d.verified}</span>
+                    </div>
+                    <div class="flex flex-col p-3 rounded-xl bg-blue-50 border border-blue-100">
+                        <span class="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">Slot Booked</span>
+                        <span class="text-2xl font-black text-blue-700">${d.booked}</span>
+                    </div>
+                    <div class="flex flex-col p-3 rounded-xl bg-violet-50 border border-violet-100">
+                        <span class="text-[10px] font-bold text-violet-600 uppercase tracking-wider mb-1">Needs Booking</span>
+                        <span class="text-2xl font-black text-violet-700">${d.notBooked}</span>
+                    </div>
+                    <div class="flex flex-col p-3 rounded-xl bg-amber-50 border border-amber-100">
+                        <span class="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1">Docs Pending</span>
+                        <span class="text-2xl font-black text-amber-700">${d.pending}</span>
+                    </div>
+                    <div class="flex flex-col p-3 rounded-xl bg-red-50 border border-red-100">
+                        <span class="text-[10px] font-bold text-red-600 uppercase tracking-wider mb-1">No Show</span>
+                        <span class="text-2xl font-black text-red-700">${d.noShow}</span>
+                    </div>
+                    <div class="flex flex-col p-3 rounded-xl bg-slate-50 border border-slate-200">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Not Signed Up</span>
+                        <span class="text-2xl font-black text-slate-700">${d.unreg}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
 }
 
 function applyFilters() {
     const fDept = document.getElementById('filterDept').value;
     const fYear = document.getElementById('filterYear').value;
     const fStatus = document.getElementById('filterStatus').value;
-    const fTimeRange = document.getElementById('filterTimeRange').value;
-    const fDate = document.getElementById('filterDate').value;
 
-    const today = new Date();
-
-    let filtered = allAppointmentsData.filter(app => {
-        let match = true;
-
-        if (fDept !== 'ALL' && app.department !== fDept) match = false;
-        if (fYear !== 'ALL' && String(app.currentYear) !== String(fYear)) match = false;
-
-        if (fStatus !== 'ALL') {
-            const baseStatus = app.status ? app.status.replace('_closed', '') : '';
-            if (baseStatus !== fStatus) match = false;
-        }
-
-        if (fDate) {
-            if (app.date !== fDate) match = false;
-        } else if (fTimeRange !== 'ALL') {
-            const appDate = new Date(app.date);
-
-            if (fTimeRange === 'TODAY') {
-                if (app.date !== today.toISOString().split('T')[0]) match = false;
-            } else if (fTimeRange === 'WEEK') {
-                const sevenDaysAgo = new Date();
-                sevenDaysAgo.setDate(today.getDate() - 7);
-                if (appDate < sevenDaysAgo || appDate > today) match = false;
-            } else if (fTimeRange === 'MONTH') {
-                if (appDate.getMonth() !== today.getMonth() || appDate.getFullYear() !== today.getFullYear()) match = false;
-            } else if (fTimeRange === 'YEAR') {
-                if (appDate.getFullYear() !== today.getFullYear()) match = false;
-            }
-        }
-
-        return match;
+    let filtered = window.unifiedCollegeData.filter(s => {
+        if (fDept !== 'ALL' && s.department !== fDept) return false;
+        if (fYear !== 'ALL' && String(s.currentYear) !== String(fYear)) return false;
+        if (fStatus !== 'ALL' && s.trueStatus !== fStatus) return false;
+        return true;
     });
-
-    let vCount = 0, pCount = 0, nsCount = 0;
-    filtered.forEach(app => {
-        const s = app.status ? app.status.replace('_closed', '') : '';
-        if (s === 'verified') vCount++;
-        else if (s === 'pending') pCount++;
-        else if (s === 'no_show') nsCount++;
-    });
-
-    document.getElementById('statTotal').textContent = filtered.length;
-    document.getElementById('statVerified').textContent = vCount;
-    document.getElementById('statPending').textContent = pCount;
-    document.getElementById('statNoShow').textContent = nsCount;
 
     const tbody = document.getElementById('statsTableBody');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-500 italic">No records found matching filters.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-500 italic">No records found matching filters.</td></tr>`;
         window.currentFilteredData = [];
         return;
     }
 
-    filtered.forEach(app => {
-        const tr = document.createElement('tr');
-        tr.className = "hover:bg-slate-50 transition-colors";
-
+    filtered.forEach(s => {
         let badgeStyle = "bg-slate-100 text-slate-600";
-        let sLabel = app.status || 'waiting';
-        const baseS = sLabel.replace('_closed', '');
+        let label = s.trueStatus;
+        let statusDetails = "";
 
-        if (baseS === 'verified') badgeStyle = "bg-emerald-100 text-emerald-700";
-        else if (baseS === 'pending') badgeStyle = "bg-amber-100 text-amber-700";
-        else if (baseS === 'no_show') badgeStyle = "bg-red-100 text-red-700";
-        else if (baseS === 'cancelled') badgeStyle = "bg-slate-200 text-slate-500";
-        else if (baseS === 'current') badgeStyle = "bg-blue-100 text-blue-700";
+        // Smart Status Parsing & Detail Generation
+        if (s.trueStatus === 'verified') {
+            badgeStyle = "bg-emerald-100 text-emerald-700"; label = "Verified";
+            statusDetails = `<span class="text-emerald-600 font-medium">Verified on ${s.latestApp ? s.latestApp.date : ''}</span>`;
+        }
+        else if (s.trueStatus === 'pending') {
+            badgeStyle = "bg-amber-100 text-amber-700"; label = "Docs Pending";
 
-        tr.innerHTML = `
-            <td class="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">${app.date} <span class="text-xs text-slate-400 block">${app.time}</span></td>
-            <td class="px-4 py-3 font-bold text-slate-800">${app.name}</td>
-            <td class="px-4 py-3 font-mono text-slate-600 text-xs">${app.grNumber}</td>
-            <td class="px-4 py-3 text-slate-600 font-bold text-xs">${app.department}</td>
-            <td class="px-4 py-3 text-slate-600 text-xs">${yearLabels[app.currentYear] || app.currentYear}</td>
-            <td class="px-4 py-3 font-mono text-emerald-600 text-xs">${app.mahadbtId || '--'}</td>
-            <td class="px-4 py-3">
-                <span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${badgeStyle}">${baseS}</span>
-            </td>
+            // Calculate exact missing docs to show the Admin
+            const req = scholarshipDocs[s.scholarshipType] || [];
+            const ver = s.latestApp && s.latestApp.documentVerification ? s.latestApp.documentVerification : {};
+            const missing = req.filter(d => !ver[d]);
+
+            if (missing.length > 0) {
+                statusDetails = `<span class="text-amber-600 font-medium">Missing: ${missing.join(', ')}</span>`;
+            } else {
+                statusDetails = `<span class="text-amber-600 font-medium">Please check profile</span>`;
+            }
+        }
+        else if (s.trueStatus === 'no_show') {
+            badgeStyle = "bg-red-100 text-red-700"; label = "Missed Appt";
+            statusDetails = `<span class="text-red-500 font-medium">Missed slot on ${s.latestApp ? s.latestApp.date : ''}</span>`;
+        }
+        else if (s.trueStatus === 'waiting' || s.trueStatus === 'current') {
+            badgeStyle = "bg-blue-100 text-blue-700"; label = "Slot Booked";
+            statusDetails = `<span class="text-blue-600 font-medium">Scheduled: ${s.latestApp ? s.latestApp.date + ' at ' + s.latestApp.time : ''}</span>`;
+        }
+        else if (s.trueStatus === 'unregistered') {
+            badgeStyle = "bg-slate-200 text-slate-500"; label = "Not Signed Up";
+            statusDetails = `<span class="text-slate-400 italic">Needs to create an account</span>`;
+        }
+        else if (s.trueStatus === 'not_booked') {
+            badgeStyle = "bg-violet-100 text-violet-700"; label = "Signed Up";
+            statusDetails = `<span class="text-violet-500 font-medium">Needs to book a slot</span>`;
+        }
+
+        // Clean UI Fallbacks: Remove all fake "Missing" text completely
+        const dbtHtml = s.mahadbtId
+            ? `<p class="text-[10px] uppercase font-bold text-slate-400 mt-0.5">MahaDBT: <span class="text-emerald-600">${s.mahadbtId}</span></p>`
+            : ``;
+        const emailHtml = s.email ? s.email : ``;
+        const phoneHtml = s.contactNo ? `<br>${s.contactNo}` : ``;
+
+        tbody.innerHTML += `
+            <tr class="hover:bg-slate-50 transition-colors">
+                <td class="px-4 py-3">
+                    <p class="font-bold text-slate-800">${s.name}</p>
+                    ${dbtHtml}
+                </td>
+                <td class="px-4 py-3 font-mono text-slate-600 font-bold">${s.grNumber}</td>
+                <td class="px-4 py-3 text-xs">
+                    <span class="font-bold text-slate-700">${s.department}</span><br>
+                    <span class="text-slate-500">${yearLabels[s.currentYear] || s.currentYear}</span>
+                </td>
+                <td class="px-4 py-3 text-xs text-slate-500">
+                    ${emailHtml}${phoneHtml}
+                </td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${badgeStyle}">${label}</span>
+                </td>
+                <td class="px-4 py-3 text-xs font-medium text-slate-500">${statusDetails}</td>
+            </tr>
         `;
-        tbody.appendChild(tr);
     });
 
     window.currentFilteredData = filtered;
@@ -1499,52 +2119,75 @@ function downloadCSV() {
     const data = window.currentFilteredData || [];
     if (data.length === 0) return showToast("No data to export!");
 
-    let csvContent = "Date,Time,Token,Student Name,Email,Contact No,GR Number,Department,Joining Year,Current Year,MahaDBT ID,Category,Status,Pending Documents\n";
+    // Professional headers for Principal/HOD review
+    let csvContent = "Student Name,GR Number,Department,Joining Year,Current Year,Scholarship Category,MahaDBT App ID,Email ID,Contact Number,Verification Status,Remarks / Missing Documents\n";
 
-    data.forEach(app => {
-        const date = app.date || "";
-        const time = app.time || "";
-        const token = app.token || "";
-        const name = `"${(app.name || "").replace(/"/g, '""')}"`;
-        const email = app.email || "";
-        const phone = app.contactNo || "";
-        const gr = app.grNumber || "";
-        const dept = app.department || "";
-        const joinYr = app.joiningYear || "";
-        const currYr = yearLabels[app.currentYear] ? `"${yearLabels[app.currentYear]}"` : (app.currentYear || "");
-        const dbt = app.mahadbtId || "";
-        const cat = app.scholarshipType || "";
-        const stat = (app.status || "").replace('_closed', '').toUpperCase();
+    data.forEach(s => {
+        // Clean and format data points
+        const name = `"${(s.name || "").replace(/"/g, '""')}"`;
+        const gr = s.grNumber || "";
+        const dept = s.department || "";
+        const joinYr = s.joiningYear || "";
+        const currYr = yearLabels[s.currentYear] ? `"${yearLabels[s.currentYear]}"` : (s.currentYear || "");
+        const cat = s.scholarshipType || "";
+        const dbt = s.mahadbtId || "Not Provided";
+        const email = s.email || "";
 
-        let pendingDocsStr = "";
-        const baseStatus = (app.status || "").replace('_closed', '');
+        // FIX: Force Excel to treat phone numbers as text to prevent the 9.88E+09 scientific notation bug
+        const phone = s.contactNo ? `="${s.contactNo}"` : "Not Provided";
 
-        if (baseStatus === 'pending') {
-            const req = scholarshipDocs[app.scholarshipType] || [];
-            const ver = app.documentVerification || {};
+        let statLabel = "Unknown";
+        let details = "";
+
+        // Standardized, clear status labels and informative remarks
+        if (s.trueStatus === 'verified') {
+            statLabel = "Verified";
+            details = `Successfully verified on ${s.latestApp ? s.latestApp.date : ''}`;
+        }
+        else if (s.trueStatus === 'pending') {
+            statLabel = "Pending";
+            const req = scholarshipDocs[s.scholarshipType] || [];
+            const ver = s.latestApp && s.latestApp.documentVerification ? s.latestApp.documentVerification : {};
             const missing = req.filter(d => !ver[d]);
-
-            if (missing.length > 0) {
-                pendingDocsStr = `"${missing.join(', ')}"`;
-            }
+            details = missing.length > 0 ? `Missing Documents: ${missing.join(', ')}` : "Pending document review";
+        }
+        else if (s.trueStatus === 'no_show') {
+            statLabel = "No Show";
+            details = `Missed scheduled appointment on ${s.latestApp ? s.latestApp.date : ''}`;
+        }
+        else if (s.trueStatus === 'waiting' || s.trueStatus === 'current') {
+            statLabel = "Slot Booked";
+            details = `Appointment scheduled for ${s.latestApp ? s.latestApp.date + ' at ' + s.latestApp.time : ''}`;
+        }
+        else if (s.trueStatus === 'not_booked') {
+            statLabel = "Registered (No Slot)";
+            details = "Student has created an portal account but hasn't booked a verification slot";
+        }
+        else if (s.trueStatus === 'unregistered') {
+            statLabel = "Not Registered";
+            details = "Student has not signed up on the portal yet";
         }
 
-        csvContent += `${date},${time},${token},${name},${email},${phone},${gr},${dept},${joinYr},${currYr},${dbt},${cat},${stat},${pendingDocsStr}\n`;
+        // Wrap details in quotes to prevent internal commas from breaking the CSV layout
+        csvContent += `${name},${gr},${dept},${joinYr},${currYr},${cat},${dbt},${email},${phone},${statLabel},"${details}"\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `Verification_Report_${new Date().toISOString().split('T')[0]}.csv`);
+
+    // Official naming convention with date
+    link.setAttribute("download", `ScholarSwift_Verification_Report_${new Date().toISOString().split('T')[0]}.csv`);
+
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("CSV Downloaded!");
+
+    showToast("Official Report CSV Downloaded!");
 }
 
-// ==================== BOOKING LOGIC ====================
 function restrictDateToDepartmentDay() {
     const dateSelect = document.getElementById('slotDate');
     const dayDisplay = document.getElementById('bookingDayDisplay');
@@ -1666,59 +2309,60 @@ async function bookSlot() {
     const t = document.getElementById('slotTime').value;
     if (!d || !t) return showToast("Pick Date and Time");
 
-    try {
-        // --- FIX 1: THE ANTI-COLLISION PRE-FLIGHT CHECK ---
-        // Before checking the user, query the entire DB to see if ANYONE just took this exact slot
-        const slotCheckSnap = await db.collection('appointments')
-            .where('date', '==', d)
-            .where('time', '==', t)
-            .get();
+    const btn = document.getElementById('bookSlotBtn');
+    const originalText = btn.textContent;
+    btn.textContent = "Booking...";
+    btn.disabled = true;
 
+    try {
+        const slotCheckSnap = await db.collection('appointments').where('date', '==', d).get();
         let isSlotTaken = false;
         slotCheckSnap.forEach(doc => {
-            // If a document exists for this time and it isn't cancelled, the slot is gone!
-            if (doc.data().status !== 'cancelled') {
+            const data = doc.data();
+            if (data.time === t && data.status !== 'cancelled') {
                 isSlotTaken = true;
             }
         });
 
         if (isSlotTaken) {
-            // Refresh their dropdown automatically to remove the stolen slot
             generateAvailableTimeSlots(d);
+            btn.textContent = originalText;
+            btn.disabled = false;
             return showToast("Oops! Someone just booked this exact slot. Please pick another.");
         }
-        // --------------------------------------------------
 
-        // FIX 2: Normal User Limit Checks
         const snap = await db.collection('appointments').where('uid', '==', currentUser.uid).get();
         let pastApps = [];
         snap.forEach(doc => pastApps.push(doc.data()));
 
         const extraAttempts = currentUser.extraAttempts || 0;
+        // ALL statuses (including 'cancelled') now consume 1 of their 3 attempts.
+        const usedAttempts = pastApps.length;
 
-        // Any status that isn't 'cancelled' officially consumes 1 of their 3 attempts.
-        const usedAttempts = pastApps.filter(app => app.status !== 'cancelled').length;
         const limit = 3 + extraAttempts;
 
         if (usedAttempts >= limit) {
+            btn.textContent = originalText;
+            btn.disabled = false;
             return showToast("Booking limit exceeded! Please visit Admin.");
         }
 
-        // Failsafe: Prevent verified users from booking again
         if (pastApps.some(app => String(app.status).includes('verified'))) {
+            btn.textContent = originalText;
+            btn.disabled = false;
             return showToast("You are already verified for this academic year!");
         }
 
-        // Only block if they have an ACTIVE appointment right now. 
         const hasActiveBooking = pastApps.some(app =>
-            app.date === d && ['waiting', 'current'].includes(app.status)
+            ['waiting', 'current'].includes(app.status)
         );
 
         if (hasActiveBooking) {
+            btn.textContent = originalText;
+            btn.disabled = false;
             return showToast("You already have an active waiting slot!");
         }
 
-        // 3. Book the Slot safely
         const correctToken = getSlotTokenNumber(t);
         await db.collection('appointments').add({
             uid: currentUser.uid,
@@ -1736,11 +2380,40 @@ async function bookSlot() {
             status: 'waiting',
             token: correctToken
         });
+
         showToast(`Slot Booked! Your Token is ${correctToken}`);
     } catch (e) {
-        showToast("Booking Failed");
+        console.error("Firebase Booking Error:", e);
+        showToast("Booking Failed - Check Console");
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
     }
 }
+
+async function toggleMahadbtWindow() {
+    try {
+        await db.collection('settings').doc('lifecycle').set({
+            mahadbtWindowOpen: !window.isMahadbtWindowOpen
+        }, { merge: true });
+        showToast(window.isMahadbtWindowOpen ? "Window Closed - Students Locked" : "Window Opened - Students can Update");
+    } catch (e) { showToast("Error updating window state"); }
+}
+
+async function promptUpdateAcademicYear() {
+    const newYear = prompt("Enter new Academic Year (e.g., 2026-2027):", window.systemAcademicYear);
+    if (newYear && newYear.trim() !== "") {
+        try {
+            await db.collection('settings').doc('lifecycle').set({
+                academicYear: newYear.trim()
+            }, { merge: true });
+            showToast("Academic Year Updated to " + newYear);
+        } catch (e) { showToast("Error updating year"); }
+    }
+}
+
+window.toggleMahadbtWindow = toggleMahadbtWindow;
+window.promptUpdateAcademicYear = promptUpdateAcademicYear;
 
 // ==================== WINDOW EXPORTS ====================
 window.setUserType = setUserType;
@@ -1754,18 +2427,57 @@ window.togglePause = togglePause;
 window.addExtraTime = addExtraTime;
 window.resetQueueDelay = resetQueueDelay;
 window.updateDocumentStatus = updateDocumentStatus;
+window.handleFileUpload = handleFileUpload;
+window.openAddStudentModal = openAddStudentModal;
+window.closeAddStudentModal = closeAddStudentModal;
+window.submitSingleStudent = submitSingleStudent;
+window.enableAdminEditMode = enableAdminEditMode;
+
 window.toggleEditProfile = () => {
-    document.getElementById('editMahadbtId').value = currentUser.mahadbtId;
-    document.getElementById('editCurrentYear').value = currentUser.currentYear;
-    document.getElementById('updateProfileModal').classList.remove('hidden');
+    const modal = document.getElementById('updateProfileModal');
+    const inputArea = document.getElementById('editMahadbtInputArea');
+    const lockedArea = document.getElementById('editMahadbtLockedArea');
+    const saveBtn = document.getElementById('saveProfileBtn');
+    const input = document.getElementById('editMahadbtId');
+
+    if (window.isMahadbtWindowOpen) {
+        inputArea.classList.remove('hidden');
+        lockedArea.classList.add('hidden');
+        saveBtn.classList.remove('hidden');
+        input.value = currentUser.mahadbtId || "";
+    } else {
+        inputArea.classList.add('hidden');
+        lockedArea.classList.remove('hidden');
+        saveBtn.classList.add('hidden');
+
+        // Explicitly show the year it belongs to!
+        const displayYear = currentUser.mahadbtYear || window.systemAcademicYear || "2025-2026";
+        document.getElementById('lockedYearDisplay').textContent = displayYear;
+    }
+
+    modal.classList.remove('hidden');
 };
+
 window.saveProfileUpdate = async () => {
-    const id = document.getElementById('editMahadbtId').value;
-    const yr = document.getElementById('editCurrentYear').value;
-    await db.collection('users').doc(currentUser.uid).update({ mahadbtId: id, currentYear: yr });
-    currentUser.mahadbtId = id; currentUser.currentYear = yr;
+    const id = document.getElementById('editMahadbtId').value.trim();
+    if (!id) return showToast("Please enter a valid Application ID");
+
+    // Save both the ID and stamp it with the current System Year
+    await db.collection('users').doc(currentUser.uid).update({
+        mahadbtId: id,
+        mahadbtYear: window.systemAcademicYear
+    });
+    await db.collection('master_students').doc(currentUser.grNumber).update({
+        mahadbtId: id,
+        mahadbtYear: window.systemAcademicYear
+    });
+
+    currentUser.mahadbtId = id;
+    currentUser.mahadbtYear = window.systemAcademicYear;
+
     document.getElementById('updateProfileModal').classList.add('hidden');
-    showStudentDashboard();
+    showStudentDashboard(); // This will trigger a refresh to show the new stamp
+    showToast(`MahaDBT ID Updated for ${window.systemAcademicYear}`);
 };
 window.toggleLiveQueue = () => document.getElementById('liveQueueSection').classList.toggle('hidden');
 window.closeUpdateModal = () => document.getElementById('updateProfileModal').classList.add('hidden');
@@ -1783,5 +2495,12 @@ window.toggleNotifications = toggleNotifications;
 window.openCancelModal = openCancelModal;
 window.closeCancelModal = closeCancelModal;
 window.confirmCancelBooking = confirmCancelBooking;
+
+window.closeEditStudentModal = closeEditStudentModal;
+window.submitEditStudent = submitEditStudent;
+
+window.openActionConfirmModal = openActionConfirmModal;
+window.closeActionConfirmModal = closeActionConfirmModal;
+window.executeConfirmedAction = executeConfirmedAction;
 
 document.addEventListener('DOMContentLoaded', initApp);

@@ -65,8 +65,9 @@
 
                     <form id="authForm" onsubmit="handleAuth(event)">
                         <div class="mb-4">
-                            <label class="block text-sm font-medium text-slate-700 mb-2">College Email Address</label>
-                            <input type="email" id="emailInput" placeholder="yourname@college.edu" required
+                            <label id="loginIdLabel" class="block text-sm font-medium text-slate-700 mb-2">PRN
+                                Number</label>
+                            <input type="text" id="prnInput" placeholder="16-digit PRN" required
                                 class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none transition-all">
                         </div>
 
@@ -79,14 +80,9 @@
                         <div id="signupExtraFields" class="hidden space-y-4 mb-4">
                             <div class="p-4 bg-blue-50 border border-blue-100 rounded-xl mb-2">
                                 <p class="text-xs text-blue-700 font-medium">Your academic details will be automatically
-                                    synced from the official college roster using your GR Number & Email.</p>
+                                    synced from the official college roster using your 16-digit PRN.</p>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-slate-700 mb-2">GR Number</label>
-                                    <input type="text" id="grNumberInput" placeholder="e.g. S2328077"
-                                        class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none uppercase transition-all">
-                                </div>
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-2">Contact No.</label>
                                     <input type="tel" id="contactInput" placeholder="10-digit number"
@@ -104,11 +100,12 @@
                             class="hidden mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl animate-pop">
                             <div class="flex items-center gap-2 mb-2">
                                 <span
-                                    class="flex items-center justify-center w-5 h-5 bg-emerald-500 text-white rounded-full"><svg
-                                        class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    class="flex items-center justify-center w-5 h-5 bg-emerald-500 text-white rounded-full">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
                                             d="M5 13l4 4L19 7"></path>
-                                    </svg></span>
+                                    </svg>
+                                </span>
                                 <p class="text-xs font-bold text-emerald-700 uppercase tracking-wider">Student Match
                                     Found</p>
                             </div>
@@ -174,11 +171,12 @@
                         </div>
 
                         <button onclick="logout()"
-                            class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-all"><svg
-                                class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-all">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path
                                     d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                            </svg></button>
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </header>
@@ -203,7 +201,7 @@
                             <p id="profileName" class="font-semibold text-slate-800">--</p>
                         </div>
                         <div>
-                            <p class="text-xs text-slate-500 mb-1 font-bold uppercase">GR Number</p>
+                            <p class="text-xs text-slate-500 mb-1 font-bold uppercase">PRN</p>
                             <p id="profileGrNumber" class="font-semibold text-slate-800">--</p>
                         </div>
                         <div>
@@ -238,6 +236,8 @@
                     </div>
                 </div>
 
+                <div id="studentGlobalAnnouncements" class="hidden mb-8"></div>
+
                 <div id="studentStatusBanner"
                     class="glass-card rounded-2xl p-6 mb-8 border-l-8 border-slate-300 animate-slide shadow-md transition-all duration-500"
                     style="animation-delay: 0.05s">
@@ -260,7 +260,6 @@
                             </div>
                         </div>
 
-
                         <div id="bannerCancelBlock"
                             class="hidden shrink-0 w-full md:w-auto border-t border-slate-200 pt-4 md:border-0 md:pt-0">
                             <button onclick="openCancelModal()"
@@ -274,6 +273,7 @@
                         </div>
                     </div>
                 </div>
+
                 <div id="studentRemarksBlock"
                     class="hidden mb-8 bg-violet-50/80 border border-violet-100 p-5 rounded-2xl animate-pop shadow-sm relative overflow-hidden">
                     <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-violet-500"></div>
@@ -440,8 +440,9 @@
         <div id="adminDashboard" class="hidden min-h-full">
             <header class="bg-slate-900 border-b border-slate-700 sticky top-0 z-50">
                 <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-                    <div class="flex items-center gap-3"><span class="text-xl font-bold text-white">ScholarSwift
-                            Admin</span></div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xl font-bold text-white">ScholarSwift Admin</span>
+                    </div>
                     <div class="flex items-center gap-4">
                         <button onclick="toggleAdminView('directory')" id="btnViewDirectory"
                             class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold">
@@ -451,7 +452,6 @@
                             </svg>
                             Student Directory
                         </button>
-
                         <button onclick="toggleAdminView('stats')" id="btnViewStats"
                             class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -460,21 +460,30 @@
                             </svg>
                             Reports
                         </button>
+                        <button onclick="toggleAdminView('announcements')" id="btnViewAnnouncements"
+                            class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                            </svg>
+                            Announcements
+                        </button>
 
                         <div class="text-right border-l border-slate-700 pl-4 ml-2">
                             <p id="adminName" class="text-white font-medium">--</p>
                             <p id="todaysDept" class="text-xs text-violet-400 font-bold uppercase">--</p>
                         </div>
                         <button onclick="logout()"
-                            class="p-2 rounded-lg bg-slate-800 text-slate-400 transition-all hover:text-white"><svg
-                                class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            class="p-2 rounded-lg bg-slate-800 text-slate-400 transition-all hover:text-white">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path d="M17 16l4-4m0 0l-4-4m4 4H7" />
-                            </svg></button>
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </header>
 
-            <div id="adminLiveQueueView" class="max-w-7xl mx-auto px-6 py-8 block">
+            <div id="adminLiveQueueView" class="max-w-7xl mx-auto px-6 py-8">
                 <div
                     class="glass-card rounded-3xl p-8 mb-8 shadow-xl border-l-8 border-violet-500 relative overflow-hidden">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
@@ -549,7 +558,7 @@
 
                             <div id="studentMetaCards" class="grid grid-cols-2 gap-4">
                                 <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                    <p class="text-[10px] font-bold text-slate-400 uppercase">GR Number</p>
+                                    <p class="text-[10px] font-bold text-slate-400 uppercase">PRN</p>
                                     <p id="activeStudentGR" class="text-sm font-semibold text-slate-700">--</p>
                                 </div>
                                 <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
@@ -560,7 +569,6 @@
                         </div>
 
                         <div class="flex flex-col h-full">
-
                             <div id="adminChecklistBlock"
                                 class="bg-slate-50 rounded-2xl p-5 border border-slate-100 flex flex-col flex-1">
                                 <h4
@@ -810,9 +818,9 @@
                                     class="bg-slate-100 text-left text-xs uppercase font-bold text-slate-500 sticky top-0 z-10 shadow-sm">
                                     <tr class="divide-x divide-slate-200">
                                         <th class="px-4 py-3">Student Name</th>
-                                        <th class="px-4 py-3">GR Number</th>
+                                        <th class="px-4 py-3">PRN</th>
                                         <th class="px-4 py-3">Dept & Year</th>
-                                        <th class="px-4 py-3">Email & Contact</th>
+                                        <th class="px-4 py-3">Contact No.</th>
                                         <th class="px-4 py-3">Status</th>
                                         <th class="px-4 py-3">Status Details & Next Steps</th>
                                     </tr>
@@ -928,7 +936,7 @@
                             </svg>
                         </div>
                         <input type="text" id="dirSearchInput" onkeyup="filterDirectory()"
-                            placeholder="Search Roster by Name, GR Number, Email, or Dept..."
+                            placeholder="Search Roster by Name, PRN or Dept..."
                             class="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 outline-none focus:border-violet-500 bg-white text-lg shadow-sm">
                     </div>
                 </div>
@@ -953,7 +961,130 @@
                     </div>
                 </div>
             </div>
+
+            <div id="adminAnnouncementsView" class="max-w-7xl mx-auto px-6 py-8 hidden">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Broadcast Announcements</h2>
+                        <p class="text-slate-400 text-sm mt-1">Send targeted live notifications to student dashboards.
+                        </p>
+                    </div>
+                    <button onclick="toggleAdminView('live')"
+                        class="px-4 py-2 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-700 transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg> Back to Queue
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-1">
+                        <div class="glass-card rounded-2xl p-6 shadow-xl border-t-4 border-violet-500">
+                            <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                <svg class="w-5 h-5 text-violet-500" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                                </svg>
+                                New Broadcast
+                            </h3>
+                            <form id="announcementForm" onsubmit="submitAnnouncement(event)">
+                                <div class="space-y-4">
+                                    <div>
+                                        <label
+                                            class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Message</label>
+                                        <textarea id="announceMsg" required rows="3"
+                                            placeholder="Type your announcement here..."
+                                            class="w-full px-4 py-3 mt-1 rounded-xl border border-slate-200 outline-none focus:border-violet-500 text-sm resize-none"></textarea>
+                                    </div>
+                                    <div>
+                                        <label
+                                            class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target
+                                            Department</label>
+                                        <select id="announceDept"
+                                            class="w-full px-4 py-2 mt-1 rounded-xl border border-slate-200 outline-none focus:border-violet-500 text-sm font-semibold text-slate-700">
+                                            <option value="ALL">All Departments</option>
+                                            <option value="COMP">COMP</option>
+                                            <option value="IT">IT</option>
+                                            <option value="AIML">AIML</option>
+                                            <option value="DS">DS</option>
+                                            <option value="MECH">MECH</option>
+                                            <option value="CIVIL">CIVIL</option>
+                                            <option value="AUTOMOBILE">AUTOMOBILE</option>
+                                        </select>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label
+                                                class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target
+                                                Year</label>
+                                            <select id="announceYear"
+                                                class="w-full px-4 py-2 mt-1 rounded-xl border border-slate-200 outline-none focus:border-violet-500 text-sm font-semibold text-slate-700">
+                                                <option value="ALL">All Years</option>
+                                                <option value="1">1st Year</option>
+                                                <option value="2">2nd Year</option>
+                                                <option value="3">3rd Year</option>
+                                                <option value="4">4th Year</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label
+                                                class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target
+                                                Status</label>
+                                            <select id="announceStatus"
+                                                class="w-full px-4 py-2 mt-1 rounded-xl border border-slate-200 outline-none focus:border-violet-500 text-sm font-semibold text-slate-700">
+                                                <option value="ALL">All</option>
+                                                <option value="not_booked">Not Booked Yet</option>
+                                                <option value="waiting">Slot Booked (Waiting)</option>
+                                                <option value="pending">Docs Pending</option>
+                                                <option value="verified">Verified</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="submit" id="btnSendBroadcast"
+                                    class="w-full py-3 mt-6 bg-violet-600 text-white font-bold rounded-xl shadow-lg hover:bg-violet-700 transition-all flex items-center justify-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                    </svg>
+                                    Publish Announcement
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                        <div class="glass-card rounded-2xl overflow-hidden shadow-xl h-full flex flex-col">
+                            <div
+                                class="px-6 py-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                                <h2 class="text-lg font-bold text-slate-800">Announcement Log</h2>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-0">
+                                <table class="w-full text-left text-sm">
+                                    <thead class="bg-slate-100 text-xs text-slate-500 uppercase font-bold sticky top-0">
+                                        <tr>
+                                            <th class="px-6 py-4">Date & Time</th>
+                                            <th class="px-6 py-4">Message</th>
+                                            <th class="px-6 py-4">Target Filters</th>
+                                            <th class="px-6 py-4">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="adminAnnouncementsLog" class="divide-y divide-slate-100 bg-white">
+                                        <tr>
+                                            <td colspan="4" class="text-center py-10 text-slate-400">Loading
+                                                announcements...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
+
         <div id="toast"
             class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-[100]">
             <div class="bg-slate-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3">
@@ -1049,7 +1180,7 @@
 
                     <div class="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
                         <div>
-                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">GR Number</p>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">PRN</p>
                             <p class="font-bold text-slate-800" id="modalGR">--</p>
                         </div>
                         <div>
@@ -1207,6 +1338,7 @@
                 </div>
             </div>
         </div>
+
         <div id="remarkConfirmModal"
             class="hidden fixed inset-0 z-[140] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl animate-pop text-center">
@@ -1255,8 +1387,8 @@
                                 class="w-full px-4 py-2 mt-1 rounded-xl border border-slate-200 outline-none focus:border-violet-500 bg-slate-50">
                         </div>
                         <div>
-                            <label class="text-xs font-bold text-slate-500 uppercase">GR Number</label>
-                            <input type="text" id="addGR" required
+                            <label class="text-xs font-bold text-slate-500 uppercase">PRN</label>
+                            <input type="text" id="addPRN" required
                                 class="w-full px-4 py-2 mt-1 rounded-xl border border-slate-200 outline-none focus:border-violet-500 bg-slate-50 uppercase">
                         </div>
                         <div>
@@ -1300,11 +1432,6 @@
                                 <option value="EWS">EWS</option>
                                 <option value="Minority">Minority</option>
                             </select>
-                        </div>
-                        <div class="col-span-2">
-                            <label class="text-xs font-bold text-slate-500 uppercase">College Email ID</label>
-                            <input type="email" id="addEmail" required placeholder="student@college.edu"
-                                class="w-full px-4 py-2 mt-1 rounded-xl border border-slate-200 outline-none focus:border-violet-500 bg-slate-50 lowercase">
                         </div>
                     </div>
                     <button type="submit"
@@ -1366,7 +1493,7 @@
                                 <option value="4">4th Year (BE)</option>
                             </select>
                         </div>
-                        <div>
+                        <div class="col-span-2">
                             <label class="text-xs font-bold text-slate-500 uppercase">Scholarship Category</label>
                             <select id="editSchType" required
                                 class="w-full px-4 py-2 mt-1 rounded-xl border border-slate-200 outline-none focus:border-violet-500 bg-slate-50">
@@ -1379,11 +1506,6 @@
                                 <option value="Minority">Minority</option>
                             </select>
                         </div>
-                        <div class="col-span-2">
-                            <label class="text-xs font-bold text-slate-500 uppercase">College Email ID</label>
-                            <input type="email" id="editEmail" required
-                                class="w-full px-4 py-2 mt-1 rounded-xl border border-slate-200 outline-none focus:border-violet-500 bg-slate-50 lowercase">
-                        </div>
                     </div>
                     <button type="submit"
                         class="w-full py-3 mt-4 bg-violet-600 text-white font-bold rounded-xl shadow-lg hover:bg-violet-700 transition-all">Update
@@ -1393,6 +1515,7 @@
         </div>
 
     </div>
+
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>

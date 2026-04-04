@@ -14,7 +14,11 @@ let remainingSeconds = 420;
 let globalDelayMinutes = 0;
 
 let allAppointmentsData = [];
-let allStudentsData = [];
+window.rawMasterData = [];
+window.rawUsersData = [];
+window.rawAppsData = [];
+window.allStudentsData = [];
+window.unifiedCollegeData = [];
 let activeModalStudentUid = null;
 
 // Notification & Sync State
@@ -84,10 +88,10 @@ const deptToDay = {
     'DS': { day: 1, name: 'Monday' },
     'AIML': { day: 2, name: 'Tuesday' },
     'COMP': { day: 3, name: 'Wednesday' },
-    'IT': { day: 4, name: 'Thursday' }, // Fixed: Moved from Friday to Thursday
-    'MECH': { day: 6, name: 'Saturday' }, // Fixed: Moved from Saturday to Friday
-    'CIVIL': { day: 6, name: 'Saturday' }, // Fixed: Moved from Saturday to Friday
-    'AUTOMOBILE': { day: 6, name: 'Saturday' } // Fixed: Moved from Saturday to Friday
+    'IT': { day: 4, name: 'Thursday' },
+    'MECH': { day: 5, name: 'Friday' },
+    'CIVIL': { day: 5, name: 'Friday' },
+    'AUTOMOBILE': { day: 5, name: 'Friday' }
 };
 
 // ==================== HELPER FUNCTIONS ====================
@@ -140,19 +144,19 @@ function getSlotTokenNumber(selectedTimeStr) {
     return tokenIndex;
 }
 
-// Proper numerical time sorting function
 function parseTime(timeStr) {
     if (!timeStr || timeStr === "--:--") return 0;
-    const parts = timeStr.trim().split(/\s+/);
-    if (parts.length < 2) return 0;
-    let [hours, minutes] = parts[0].split(':').map(Number);
-    let modifier = parts[1].toUpperCase();
-    if (modifier === 'PM' && hours !== 12) hours += 12;
-    if (modifier === 'AM' && hours === 12) hours = 0;
-    return hours * 60 + minutes;
+    try {
+        const parts = String(timeStr).trim().split(/\s+/);
+        if (parts.length < 2) return 0;
+        let [hours, minutes] = parts[0].split(':').map(Number);
+        let modifier = parts[1].toUpperCase();
+        if (modifier === 'PM' && hours !== 12) hours += 12;
+        if (modifier === 'AM' && hours === 12) hours = 0;
+        return hours * 60 + minutes;
+    } catch (err) { return 0; }
 }
 
-// Centralized Master Delay Calculation Engine for BOTH views
 function getMasterDelay() {
     const now = new Date();
     let masterDelay = globalDelayMinutes;
@@ -163,7 +167,6 @@ function getMasterDelay() {
             const headDate = new Date();
             headDate.setHours(Math.floor(headMins / 60), (headMins % 60) + globalDelayMinutes, 0, 0);
 
-            // Use exact elapsed minutes for 1:1 synchronization
             const driftMins = Math.floor((now - headDate) / 60000);
             if (driftMins > 0) {
                 masterDelay += driftMins;
@@ -191,7 +194,6 @@ function startLiveClock() {
             clockEl.textContent = now.toLocaleString('en-US', options).replace(/,/g, ' |');
         }
 
-        // ONE unified delay for everyone in the system
         let masterDelay = getMasterDelay();
 
         if (currentUserType === 'student' && window.currentStudentActiveApp) {
@@ -285,6 +287,7 @@ function startLiveClock() {
     updateTime();
     setInterval(updateTime, 1000);
 }
+
 function listenToQueueSettings() {
     db.collection('settings').doc('queueStatus').onSnapshot(doc => {
         if (doc.exists) {
@@ -300,13 +303,11 @@ function listenToQueueSettings() {
         }
     });
 
-    // Listen to System Lifecycle Settings
     db.collection('settings').doc('lifecycle').onSnapshot(doc => {
         let data = {};
         if (doc.exists) {
             data = doc.data();
         } else {
-            // Auto-initialize the database document if it doesn't exist yet
             data = { academicYear: "2025-2026", mahadbtWindowOpen: false };
             db.collection('settings').doc('lifecycle').set(data);
         }
@@ -314,7 +315,6 @@ function listenToQueueSettings() {
         window.systemAcademicYear = data.academicYear || "2025-2026";
         window.isMahadbtWindowOpen = data.mahadbtWindowOpen || false;
 
-        // Update Admin UI
         const yearDisplay = document.getElementById('adminSystemYearDisplay');
         if (yearDisplay) yearDisplay.textContent = window.systemAcademicYear;
 
@@ -332,7 +332,6 @@ function listenToQueueSettings() {
             }
         }
 
-        // Refresh Student Edit Modal if it's currently open
         const updateModal = document.getElementById('updateProfileModal');
         if (updateModal && !updateModal.classList.contains('hidden') && typeof window.toggleEditProfile === 'function') {
             window.toggleEditProfile();
@@ -462,6 +461,9 @@ function setUserType(type) {
     const authTabs = document.getElementById('authTabs');
     const authTitle = document.getElementById('authTitle');
 
+    const loginIdLabel = document.getElementById('loginIdLabel');
+    const prnInput = document.getElementById('prnInput');
+
     if (type === 'student') {
         studentToggle.classList.add('bg-emerald-500', 'text-white');
         studentToggle.classList.remove('text-slate-400');
@@ -470,6 +472,12 @@ function setUserType(type) {
         adminToggle.classList.remove('bg-violet-500', 'text-white');
         adminToggle.classList.add('text-slate-400', 'hover:text-white');
         if (signupTab) signupTab.classList.remove('hidden');
+
+        if (loginIdLabel) loginIdLabel.textContent = "PRN Number";
+        if (prnInput) {
+            prnInput.placeholder = "16-digit PRN";
+            prnInput.type = "text";
+        }
     } else {
         adminToggle.classList.add('bg-violet-500', 'text-white');
         adminToggle.classList.remove('text-slate-400');
@@ -479,13 +487,19 @@ function setUserType(type) {
         studentToggle.classList.add('text-slate-400', 'hover:text-white');
         if (signupTab) signupTab.classList.add('hidden');
         setAuthMode('login');
+
+        if (loginIdLabel) loginIdLabel.textContent = "Admin Email";
+        if (prnInput) {
+            prnInput.placeholder = "admin@scholarswift.com";
+            prnInput.type = "email";
+        }
     }
 }
 
 function setAuthMode(mode) {
     if (currentUserType === 'admin' && mode === 'signup') return;
     authMode = mode;
-    window.currentSignupStep = 1; // Reset 2-Step Sign-up tracker
+    window.currentSignupStep = 1;
 
     const loginTab = document.getElementById('loginTab');
     const signupTab = document.getElementById('signupTab');
@@ -495,11 +509,12 @@ function setAuthMode(mode) {
     const passwordInput = document.getElementById('passwordInput');
     const fetchedDetailsBlock = document.getElementById('fetchedDetailsBlock');
 
-    // Unlock fields if they were locked during step 1
-    document.getElementById('emailInput').readOnly = false;
-    document.getElementById('grNumberInput').readOnly = false;
-    document.getElementById('emailInput').classList.remove('opacity-70', 'bg-slate-50');
-    document.getElementById('grNumberInput').classList.remove('opacity-70', 'bg-slate-50');
+    const prnInput = document.getElementById('prnInput');
+
+    if (prnInput) {
+        prnInput.readOnly = false;
+        prnInput.classList.remove('opacity-70', 'bg-slate-50');
+    }
 
     if (mode === 'login') {
         if (loginTab) loginTab.classList.add('bg-white', 'shadow', 'text-slate-800');
@@ -507,7 +522,6 @@ function setAuthMode(mode) {
         if (signupExtraFields) signupExtraFields.classList.add('hidden');
         if (fetchedDetailsBlock) fetchedDetailsBlock.classList.add('hidden');
 
-        // Show password for login
         if (passwordBlock) passwordBlock.classList.remove('hidden');
         if (passwordInput) passwordInput.required = true;
 
@@ -518,7 +532,6 @@ function setAuthMode(mode) {
         if (signupExtraFields) signupExtraFields.classList.remove('hidden');
         if (fetchedDetailsBlock) fetchedDetailsBlock.classList.add('hidden');
 
-        // Hide password for Step 1 of Sign Up
         if (passwordBlock) passwordBlock.classList.add('hidden');
         if (passwordInput) passwordInput.required = false;
 
@@ -528,40 +541,36 @@ function setAuthMode(mode) {
 
 async function handleAuth(event) {
     event.preventDefault();
-    const emailInput = document.getElementById('emailInput');
-    const email = emailInput.value.toLowerCase().trim();
+
+    const prnInput = document.getElementById('prnInput') || document.getElementById('emailInput');
+    const prn = prnInput.value.toUpperCase().trim();
+
     const passwordInput = document.getElementById('passwordInput');
     const password = passwordInput.value;
     const errorDiv = document.getElementById('authError');
     errorDiv.classList.add('hidden');
 
+    const dummyAuthEmail = `${prn}@scholarswift.local`;
+
     try {
         if (currentUserType === 'student') {
             if (authMode === 'signup') {
-                const contactNo = document.getElementById('contactInput').value;
-                const grInput = document.getElementById('grNumberInput');
-                const grNumber = grInput.value.toUpperCase().trim();
-                const mahadbtId = document.getElementById('mahadbtIdInput').value.trim();
+                const contactNo = document.getElementById('contactInput') ? document.getElementById('contactInput').value.trim() : "";
+                const mahadbtId = document.getElementById('mahadbtIdInput') ? document.getElementById('mahadbtIdInput').value.trim() : "";
 
-                // --- SIGN-UP STEP 1: VERIFY DATA ---
                 if (window.currentSignupStep === 1 || !window.currentSignupStep) {
-                    if (!grNumber || !email) throw new Error("GR Number and Email are required to verify!");
+                    if (!prn) throw new Error("16-digit PRN is required to verify!");
 
-                    const masterDoc = await db.collection('master_students').doc(grNumber).get();
+                    const masterDoc = await db.collection('master_students').doc(prn).get();
                     if (!masterDoc.exists) {
-                        throw new Error("GR Number not found in official roster. Contact Admin.");
+                        throw new Error("PRN not found in official roster. Please contact the Verification Cell.");
                     }
 
                     const masterData = masterDoc.data();
                     if (masterData.isRegistered) {
-                        throw new Error("An account with this GR Number already exists. Please Sign In.");
+                        throw new Error("An account with this PRN already exists. Please Sign In.");
                     }
 
-                    if (masterData.email && masterData.email !== email) {
-                        throw new Error("This Email does not match the official college records for this GR Number.");
-                    }
-
-                    // Success! Show Step 2 (Confirmation & Password)
                     document.getElementById('fetchedName').textContent = masterData.name;
                     document.getElementById('fetchedDept').textContent = masterData.department;
                     document.getElementById('fetchedYear').textContent = yearLabels[masterData.currentYear] || `Year ${masterData.currentYear}`;
@@ -571,34 +580,27 @@ async function handleAuth(event) {
                     document.getElementById('passwordBlock').classList.remove('hidden');
                     passwordInput.required = true;
 
-                    // Lock the identifying inputs so they can't change them after verification
-                    emailInput.readOnly = true;
-                    grInput.readOnly = true;
-                    emailInput.classList.add('opacity-70', 'bg-slate-50');
-                    grInput.classList.add('opacity-70', 'bg-slate-50');
+                    prnInput.readOnly = true;
+                    prnInput.classList.add('opacity-70', 'bg-slate-50');
 
                     document.getElementById('authSubmit').textContent = 'Confirm & Create Account';
                     window.currentSignupStep = 2;
-                    window.verifiedMasterData = masterData; // Save temporarily for Step 2
+                    window.verifiedMasterData = masterData;
 
-                    return; // Halt execution until they type password and click again
+                    return;
                 }
-                // --- SIGN-UP STEP 2: CREATE ACCOUNT ---
                 else if (window.currentSignupStep === 2) {
-                    if (!mahadbtId || !password) throw new Error("Password and MahaDBT ID are required to complete sign up!");
+                    if (!mahadbtId || !password || !contactNo) throw new Error("Password, Contact Number, and MahaDBT ID are required!");
 
                     const masterData = window.verifiedMasterData;
 
-                    // Create auth user in Firebase
-                    const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                    const userCredential = await auth.createUserWithEmailAndPassword(dummyAuthEmail, password);
 
-                    // Combine master data with new user data
                     const studentData = {
                         uid: userCredential.user.uid,
-                        email: email,
+                        prn: prn,
                         contactNo: contactNo,
                         mahadbtId: mahadbtId,
-                        grNumber: grNumber,
                         firstName: masterData.firstName,
                         lastName: masterData.lastName,
                         name: masterData.name,
@@ -608,24 +610,20 @@ async function handleAuth(event) {
                         scholarshipType: masterData.scholarshipType,
                         role: 'student',
                         extraAttempts: 0,
-                        adminRemark: masterData.adminRemark || "", // NEW: Inherit directory messages!
+                        adminRemark: masterData.adminRemark || "",
                         scholarId: `${masterData.department}${Math.floor(100 + Math.random() * 900)}`
                     };
 
-                    // Save to Users collection
                     await db.collection('users').doc(userCredential.user.uid).set(studentData);
-
-                    // Mark master roster as registered so it can't be claimed again
-                    await db.collection('master_students').doc(grNumber).update({ isRegistered: true, uid: userCredential.user.uid });
+                    await db.collection('master_students').doc(prn).update({ isRegistered: true, uid: userCredential.user.uid });
 
                     currentUser = { ...studentData, type: 'student' };
-                    window.currentSignupStep = 1; // Reset state
+                    window.currentSignupStep = 1;
                     showToast(`Success! Account created for ${masterData.name}`);
                     showStudentDashboard();
                 }
             } else {
-                // Login logic remains same
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                const userCredential = await auth.signInWithEmailAndPassword(dummyAuthEmail, password);
                 const doc = await db.collection('users').doc(userCredential.user.uid).get();
                 if (doc.exists) {
                     currentUser = { ...doc.data(), uid: userCredential.user.uid, type: 'student' };
@@ -633,11 +631,11 @@ async function handleAuth(event) {
                 } else throw new Error("Profile not found!");
             }
         } else {
-            // Admin logic remains same
+            const adminInput = prn.toLowerCase();
             const ADMIN_EMAIL = "admin@scholarswift.com";
             const ADMIN_PASS = "admin123";
 
-            if (email === ADMIN_EMAIL && password === ADMIN_PASS) {
+            if (adminInput === ADMIN_EMAIL && password === ADMIN_PASS) {
                 currentUser = { name: 'System Admin', role: 'Head', dept: 'Verification Cell', type: 'admin', uid: 'admin_fixed_id' };
                 showAdminDashboard();
                 showToast("Welcome Admin");
@@ -661,7 +659,7 @@ function showStudentDashboard() {
 
     const fields = {
         'studentName': currentUser.name, 'studentKey': currentUser.scholarId,
-        'profileName': currentUser.name, 'profileGrNumber': currentUser.grNumber,
+        'profileName': currentUser.name, 'profileGrNumber': currentUser.prn,
         'profileDept': currentUser.department, 'profileYear': yearLabels[currentUser.currentYear] || "Year " + currentUser.currentYear,
         'profileMahaDBT': currentUser.mahadbtId ? `${currentUser.mahadbtId} (${displayYear})` : "--",
         'profileSchType': currentUser.scholarshipType
@@ -672,11 +670,9 @@ function showStudentDashboard() {
         if (el) el.textContent = value || "--";
     }
 
-    // Helper function to update the remark banner dynamically
     function refreshRemarkBanner() {
         const remarksBlock = document.getElementById('studentRemarksBlock');
         const remarkTextEl = document.getElementById('studentRemarkText');
-
         const relevantApp = window.currentStudentActiveApp || (window.allStudentApps && window.allStudentApps[0]);
         const displayRemark = currentUser.adminRemark || (relevantApp ? relevantApp.remarks : '');
 
@@ -688,14 +684,11 @@ function showStudentDashboard() {
         }
     }
 
-    // NEW: Real-time listener for the User Profile (Catches live Admin Remarks & Extra Attempts instantly)
     if (!window.userProfileListener) {
         window.userProfileListener = db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
             if (doc.exists) {
                 currentUser = { ...currentUser, ...doc.data() };
-                refreshRemarkBanner(); // Instantly update the message
-
-                // Instantly update attempts if Admin grants them
+                refreshRemarkBanner();
                 if (window.allStudentApps) {
                     const attemptsEl = document.getElementById('profileAttempts');
                     if (attemptsEl) {
@@ -724,7 +717,7 @@ function showStudentDashboard() {
                 return parseTime(b.time) - parseTime(a.time);
             });
 
-            window.allStudentApps = allApps; // Save globally so the profile listener can use it
+            window.allStudentApps = allApps;
 
             const usedAttempts = allApps.length;
             const extraAttempts = currentUser.extraAttempts || 0;
@@ -741,6 +734,68 @@ function showStudentDashboard() {
             const lastProcessedApp = allApps.find(a => ['pending', 'pending_closed', 'no_show', 'no_show_closed'].includes(a.status));
 
             window.currentStudentActiveApp = activeApp || null;
+
+            // --- STUDENT ANNOUNCEMENT LISTENER ---
+            let myTrueStatus = "not_booked";
+            if (isVerified) {
+                myTrueStatus = "verified";
+            } else if (lastProcessedApp && String(lastProcessedApp.status).includes('pending')) {
+                myTrueStatus = "pending";
+            } else if (activeApp) {
+                myTrueStatus = "waiting";
+            } else if (allApps[0] && allApps[0].status.includes('no_show')) {
+                myTrueStatus = "no_show";
+            }
+
+            if (!window.studentAnnounceListener) {
+                window.studentAnnounceListener = db.collection('announcements').orderBy('createdAt', 'desc').onSnapshot(announceSnap => {
+                    const container = document.getElementById('studentGlobalAnnouncements');
+                    if (!container) return;
+
+                    let activeHtml = "";
+                    let newAnnouncementsFound = false;
+
+                    announceSnap.forEach(doc => {
+                        const ann = doc.data();
+                        const deptMatch = ann.targetDept === 'ALL' || ann.targetDept === currentUser.department;
+                        const yearMatch = ann.targetYear === 'ALL' || ann.targetYear === String(currentUser.currentYear);
+                        const statusMatch = ann.targetStatus === 'ALL' || ann.targetStatus === myTrueStatus;
+
+                        if (deptMatch && yearMatch && statusMatch) {
+                            activeHtml += `
+                                <div class="bg-blue-50/90 border-l-4 border-blue-500 p-4 rounded-r-xl shadow-sm mb-3 relative animate-slide">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="flex h-2 w-2 relative">
+                                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                              <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                                            </span>
+                                            <h4 class="text-xs font-black text-blue-800 uppercase tracking-widest">Admin Broadcast</h4>
+                                        </div>
+                                        <span class="text-[10px] font-bold text-blue-400">${ann.timestampString || 'Just now'}</span>
+                                    </div>
+                                    <p class="text-sm text-blue-900 font-medium mt-1">${ann.message}</p>
+                                </div>
+                            `;
+
+                            if (!window.seenAnnouncements) window.seenAnnouncements = new Set();
+                            if (!window.seenAnnouncements.has(doc.id)) {
+                                newAnnouncementsFound = true;
+                                window.seenAnnouncements.add(doc.id);
+                            }
+                        }
+                    });
+
+                    if (activeHtml !== "") {
+                        container.innerHTML = activeHtml;
+                        container.classList.remove('hidden');
+                        if (newAnnouncementsFound) showToast("New Admin Announcement!");
+                    } else {
+                        container.classList.add('hidden');
+                        container.innerHTML = "";
+                    }
+                });
+            }
 
             const banner = document.getElementById('studentStatusBanner');
             const statusText = document.getElementById('overallStatusText');
@@ -785,7 +840,6 @@ function showStudentDashboard() {
                 if (activeApp) {
                     bColor = 'border-blue-500'; iconBg = 'bg-blue-100'; iconText = 'text-blue-600';
                     if (!hasPendingDocs) title = "Verification Scheduled";
-
                     subtextHtml = missingHtml + `<div class="mt-2 text-sm font-medium text-blue-700 bg-blue-50 inline-block px-3 py-2 rounded-lg border border-blue-100 shadow-sm">📅 Scheduled for <span class="font-bold">${activeApp.date}</span> at <span class="font-bold">${activeApp.time}</span></div>`;
                     svg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>`;
                 } else {
@@ -816,7 +870,6 @@ function showStudentDashboard() {
                 statusIcon.innerHTML = `<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svg}</svg>`;
             }
 
-            // Call the helper to update the remarks banner!
             refreshRemarkBanner();
 
             const historyBody = document.getElementById('studentHistoryBody');
@@ -864,17 +917,10 @@ function showStudentDashboard() {
                 if (bookingContainer) bookingContainer.classList.add('hidden');
                 if (fineMessage) fineMessage.classList.add('hidden');
                 if (liveQueue) liveQueue.classList.remove('hidden');
-
                 document.getElementById('yourToken').textContent = activeApp.token;
 
                 const cancelBlock = document.getElementById('bannerCancelBlock');
-                if (cancelBlock) {
-                    if (activeApp.status === 'current') {
-                        cancelBlock.classList.add('hidden');
-                    } else {
-                        cancelBlock.classList.remove('hidden');
-                    }
-                }
+                if (cancelBlock) cancelBlock.classList.toggle('hidden', activeApp.status === 'current');
 
                 db.collection('appointments').where('date', '==', activeApp.date).where('status', '==', 'waiting').get().then(waitSnap => {
                     let waitingList = [];
@@ -882,11 +928,7 @@ function showStudentDashboard() {
                     waitingList.sort((a, b) => parseTime(a.time) - parseTime(b.time));
                     const position = waitingList.findIndex(s => s.token === activeApp.token);
                     const aheadEl = document.getElementById('peopleAhead');
-                    if (aheadEl && activeApp.status === 'waiting') {
-                        aheadEl.textContent = position === -1 ? "0" : position;
-                    } else if (aheadEl) {
-                        aheadEl.textContent = "0";
-                    }
+                    if (aheadEl) aheadEl.textContent = (activeApp.status === 'waiting') ? (position === -1 ? "0" : position) : "0";
                 });
 
                 const slotEl = document.getElementById('yourSlotTime');
@@ -894,7 +936,6 @@ function showStudentDashboard() {
 
             } else {
                 if (liveQueue) liveQueue.classList.add('hidden');
-
                 const cancelBlock = document.getElementById('bannerCancelBlock');
                 if (cancelBlock) cancelBlock.classList.add('hidden');
 
@@ -922,6 +963,7 @@ function showStudentDashboard() {
             }
         });
 }
+
 function openCancelModal() {
     document.getElementById('cancelConfirmModal').classList.remove('hidden');
 }
@@ -942,7 +984,6 @@ async function confirmCancelBooking() {
             const docId = snap.docs[0].id;
             await db.collection('appointments').doc(docId).update({ status: 'cancelled' });
             showToast("Appointment Cancelled. Attempt deducted.");
-
         }
         closeCancelModal();
     } catch (e) {
@@ -985,7 +1026,7 @@ function renderDocumentChecklist(student, appointment) {
     }
 }
 
-// ==================== ADMIN DASHBOARD ====================
+// ==================== ADMIN DASHBOARD & DATA PIPELINE ====================
 function showAdminDashboard() {
     document.getElementById('authPage').classList.add('hidden');
     document.getElementById('adminDashboard').classList.remove('hidden');
@@ -993,8 +1034,8 @@ function showAdminDashboard() {
     document.getElementById('todaysDept').textContent = `${currentUser.role} | ${currentUser.department}`;
 
     toggleAdminView('live');
+    loadStudentDirectory(); // Force load the pipeline!
 
-    // Calculate and display today's department schedule compactly
     const todayDayNum = new Date().getDay();
     let todaysDepts = [];
     for (const [dept, info] of Object.entries(deptToDay)) {
@@ -1094,12 +1135,12 @@ function showAdminDashboard() {
     window.adminQueueSnapshotObj = db.collection('appointments').where('date', '==', todayStr)
         .onSnapshot(snap => {
             let list = [];
-            let waitingCount = 0; // Track the queue
+            let waitingCount = 0;
 
             snap.forEach(doc => {
                 const data = doc.data();
                 list.push({ id: doc.id, ...data });
-                if (data.status === 'waiting') waitingCount++; // Tally up waiting students
+                if (data.status === 'waiting') waitingCount++;
             });
             list.sort((a, b) => parseTime(a.time) - parseTime(b.time));
 
@@ -1107,7 +1148,6 @@ function showAdminDashboard() {
             window.renderAdminQueueTable();
             refreshActiveStudentDisplay();
 
-            // Instantly update the new UI counter!
             const queueCounter = document.getElementById('adminPeopleInQueue');
             if (queueCounter) queueCounter.textContent = waitingCount;
         });
@@ -1118,41 +1158,56 @@ function showAdminDashboard() {
             window.renderAdminQueueTable();
         }
     }, 1000);
-
-    if (window.adminAutoCallInterval) {
-        clearInterval(window.adminAutoCallInterval);
-        window.adminAutoCallInterval = null;
-    }
 }
 
 function toggleAdminView(view) {
     const liveView = document.getElementById('adminLiveQueueView');
     const statsView = document.getElementById('adminStatsView');
     const dirView = document.getElementById('adminDirectoryView');
+    const announceView = document.getElementById('adminAnnouncementsView');
 
-    if (liveView) liveView.classList.add('hidden');
-    if (statsView) statsView.classList.add('hidden');
-    if (dirView) dirView.classList.add('hidden');
+    // Forcefully hide everything and strip conflicting classes
+    [liveView, statsView, dirView, announceView].forEach(el => {
+        if (el) {
+            el.classList.add('hidden');
+            el.classList.remove('block');
+        }
+    });
 
-    if (view === 'stats') {
-        if (statsView) statsView.classList.remove('hidden');
-        startLiveAnalytics();
-    } else if (view === 'directory') {
-        // FIX: Actually unhide the directory and fetch the data!
-        if (dirView) dirView.classList.remove('hidden');
-        loadStudentDirectory();
-    } else {
-        if (liveView) liveView.classList.remove('hidden');
+    ['btnViewStats', 'btnViewDirectory', 'btnViewAnnouncements'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.remove('bg-emerald-600', 'text-white');
+    });
+
+    if (view === 'live' && liveView) liveView.classList.remove('hidden');
+    else if (view === 'stats' && statsView) {
+        statsView.classList.remove('hidden');
+        const btn = document.getElementById('btnViewStats');
+        if (btn) btn.classList.add('bg-emerald-600', 'text-white');
+        if (window.unifiedCollegeData && window.unifiedCollegeData.length > 0) applyFilters();
     }
+    else if (view === 'directory' && dirView) {
+        dirView.classList.remove('hidden');
+        const btn = document.getElementById('btnViewDirectory');
+        if (btn) btn.classList.add('bg-emerald-600', 'text-white');
+    }
+    else if (view === 'announcements' && announceView) {
+        announceView.classList.remove('hidden');
+        const btn = document.getElementById('btnViewAnnouncements');
+        if (btn) btn.classList.add('bg-emerald-600', 'text-white');
+        if (typeof initAdminAnnouncementListener === 'function') initAdminAnnouncementListener();
+    }
+
+    window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
 async function refreshActiveStudentDisplay() {
     const snap = await db.collection('appointments').where('status', 'in', ['current', 'verified', 'pending', 'no_show']).limit(1).get();
 
     const dossier = document.getElementById('activeDossier');
+    if (!dossier) return;
     const container = dossier.parentElement;
 
-    // UI Elements to toggle based on Empty vs Active state
     const timerContainer = document.getElementById('timerContainer');
     const studentMetaCards = document.getElementById('studentMetaCards');
     const adminChecklistBlock = document.getElementById('adminChecklistBlock');
@@ -1172,35 +1227,30 @@ async function refreshActiveStudentDisplay() {
     if (oldFlag) oldFlag.remove();
 
     if (!snap.empty) {
-        // --- DESK IS OCCUPIED ---
         const docRef = snap.docs[0];
         const data = docRef.data();
         const status = data.status;
 
-        // Unhide all the active UI blocks
         if (timerContainer) timerContainer.classList.remove('hidden');
         if (studentMetaCards) studentMetaCards.classList.remove('hidden');
         if (adminChecklistBlock) adminChecklistBlock.classList.remove('hidden');
         if (actionButtonsBlock) actionButtonsBlock.classList.remove('hidden');
         if (remarksBlock) remarksBlock.classList.remove('hidden');
-        if (emptyQueueGraphic) emptyQueueGraphic.classList.add('hidden'); // Hide the empty graphic
+        if (emptyQueueGraphic) emptyQueueGraphic.classList.add('hidden');
 
         if (remarksInput) {
             remarksInput.value = data.remarks || '';
         }
 
         document.getElementById('activeStudentName').textContent = data.name;
-        document.getElementById('activeStudentGR').textContent = data.grNumber;
+        document.getElementById('activeStudentGR').textContent = data.prn || "--";
         document.getElementById('activeMahaDBT').textContent = data.mahadbtId || "--";
         document.getElementById('activeSchType').textContent = data.scholarshipType;
         document.getElementById('adminCurrentToken').textContent = `TOKEN: ${data.token}`;
 
-        if (slotIndicator) {
-            slotIndicator.textContent = `Slot: ${data.time}`;
-        }
+        if (slotIndicator) slotIndicator.textContent = `Slot: ${data.time}`;
 
         if (['verified', 'pending', 'no_show'].includes(status)) {
-            // STUDENT IS FINISHED
             isTimerRunning = false;
             const flag = document.createElement('div');
             flag.id = 'resultFlag';
@@ -1221,12 +1271,10 @@ async function refreshActiveStudentDisplay() {
             }
 
             container.appendChild(flag);
-
-            if (actionButtonsBlock) actionButtonsBlock.classList.add('hidden'); // Hide action buttons
+            if (actionButtonsBlock) actionButtonsBlock.classList.add('hidden');
             if (startTimerBtn) startTimerBtn.classList.add('hidden');
             if (sessionCountdown) clearInterval(sessionCountdown);
 
-            // Lock remarks
             if (remarksInput) {
                 remarksInput.readOnly = true;
                 remarksInput.classList.add('bg-slate-100', 'text-slate-500', 'cursor-not-allowed');
@@ -1236,7 +1284,6 @@ async function refreshActiveStudentDisplay() {
             if (saveRemarkBtn) saveRemarkBtn.classList.add('hidden');
 
         } else {
-            // STUDENT IS CURRENTLY ACTIVE
             if (!isTimerRunning && status === 'current') {
                 isTimerRunning = true;
                 startSessionTimer(420);
@@ -1256,23 +1303,17 @@ async function refreshActiveStudentDisplay() {
 
         const studentData = { scholarshipType: data.scholarshipType };
         const appointmentData = { id: docRef.id, documentVerification: data.documentVerification || {} };
-        // We only render the checklist if the block is actually visible
         if (typeof renderDocumentChecklist === 'function') {
             renderDocumentChecklist(studentData, appointmentData);
         }
 
     } else {
-        // --- QUEUE IS EMPTY ---
         isTimerRunning = false;
-
-        // INSTANTLY HIDE ALL UNNECESSARY CLUTTER
         if (timerContainer) timerContainer.classList.add('hidden');
         if (studentMetaCards) studentMetaCards.classList.add('hidden');
         if (adminChecklistBlock) adminChecklistBlock.classList.add('hidden');
         if (actionButtonsBlock) actionButtonsBlock.classList.add('hidden');
         if (remarksBlock) remarksBlock.classList.add('hidden');
-
-        // Show the beautiful "Empty" graphic
         if (emptyQueueGraphic) emptyQueueGraphic.classList.remove('hidden');
 
         document.getElementById('activeStudentName').textContent = "Desk Available";
@@ -1287,6 +1328,7 @@ async function refreshActiveStudentDisplay() {
         if (sessionCountdown) clearInterval(sessionCountdown);
     }
 }
+
 async function manualStartTimer() {
     isTimerRunning = true;
     const startBtn = document.getElementById('startTimerBtn');
@@ -1374,14 +1416,13 @@ async function updateActiveStatus(newStatus) {
             }
         }
 
-        // NEW: Capture Admin Remarks before updating the database
         const remarksInput = document.getElementById('adminRemarksInput');
         const remarkText = remarksInput ? remarksInput.value.trim() : "";
 
         await db.collection('appointments').doc(docRef.id).update({
             status: newStatus,
             processedAt: new Date().toISOString(),
-            remarks: remarkText // Save the remark to the student's appointment record
+            remarks: remarkText
         });
 
         let recoveredMins = 0;
@@ -1452,17 +1493,18 @@ async function nextToken() {
 function togglePause() {
     isQueuePaused = !isQueuePaused;
     const pauseBtn = document.getElementById('pauseBtn');
-    if (isQueuePaused) {
-        if (sessionCountdown) clearInterval(sessionCountdown);
-        pauseBtn.textContent = "Resume Queue";
-        pauseBtn.className = "px-4 py-3 bg-amber-500 text-white font-semibold rounded-xl transition-all";
-    } else {
-        pauseBtn.textContent = "Pause Queue";
-        pauseBtn.className = "px-4 py-3 bg-slate-100 text-slate-600 font-semibold rounded-xl transition-all";
-        startSessionTimer(remainingSeconds);
+    if (pauseBtn) {
+        if (isQueuePaused) {
+            if (sessionCountdown) clearInterval(sessionCountdown);
+            pauseBtn.textContent = "Resume Queue";
+            pauseBtn.className = "px-4 py-3 bg-amber-500 text-white font-semibold rounded-xl transition-all";
+        } else {
+            pauseBtn.textContent = "Pause Queue";
+            pauseBtn.className = "px-4 py-3 bg-slate-100 text-slate-600 font-semibold rounded-xl transition-all";
+            startSessionTimer(remainingSeconds);
+        }
     }
     db.collection('settings').doc('queueStatus').set({ isPaused: isQueuePaused });
-
 }
 
 // --- ADMIN ACTION CONFIRMATION MODAL ---
@@ -1526,7 +1568,6 @@ function executeConfirmedAction() {
     closeActionConfirmModal();
 }
 
-// --- DEDICATED ADMIN REMARKS MODAL LOGIC ---
 function openRemarkConfirmModal() {
     const name = document.getElementById('activeStudentName').textContent;
     if (!name || name === "Desk Available" || name === "--") {
@@ -1566,7 +1607,7 @@ async function confirmAndSaveRemark() {
 
 // ==================== MASTER ROSTER MANAGEMENT (ADMIN) ====================
 
-function handleFileUpload(event) {
+async function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -1583,45 +1624,61 @@ function handleFileUpload(event) {
 
             let batch = db.batch();
             let count = 0;
+            let skipped = 0;
+
+            let seenPRNs = new Set();
+            let hasDuplicates = false;
 
             for (let i = 1; i < rows.length; i++) {
                 const cols = rows[i];
-                if (!cols || cols.length < 7) continue;
+                const rawPrn = cols[0] ? String(cols[0]).toUpperCase().trim() : null;
 
-                const grNumber = String(cols[0]).toUpperCase().trim();
-                if (!grNumber || grNumber === 'UNDEFINED') continue;
+                if (!rawPrn || rawPrn === 'UNDEFINED' || rawPrn.includes('---')) {
+                    skipped++;
+                    continue;
+                }
 
-                const docRef = db.collection('master_students').doc(grNumber);
+                if (rawPrn.includes('E+') || seenPRNs.has(rawPrn)) {
+                    hasDuplicates = true;
+                    break;
+                }
+                seenPRNs.add(rawPrn);
+
+                const docRef = db.collection('master_students').doc(rawPrn);
 
                 batch.set(docRef, {
-                    grNumber: grNumber,
-                    firstName: String(cols[1]).trim(),
-                    lastName: String(cols[2]).trim(),
-                    name: `${String(cols[1]).trim()} ${String(cols[2]).trim()}`,
-                    department: String(cols[3]).toUpperCase().trim(),
-                    joiningYear: String(cols[4]).trim(),
-                    currentYear: String(cols[5]).trim(),
-                    scholarshipType: String(cols[6]).trim(),
-                    email: cols[7] ? String(cols[7]).toLowerCase().trim() : "",
+                    prn: rawPrn,
+                    firstName: cols[1] ? String(cols[1]).trim() : "Unknown",
+                    lastName: cols[2] ? String(cols[2]).trim() : "",
+                    name: `${cols[1] || ''} ${cols[2] || ''}`.trim() || "Unknown Student",
+                    department: cols[3] ? String(cols[3]).toUpperCase().trim() : "N/A",
+                    joiningYear: cols[4] ? String(cols[4]).trim() : "N/A",
+                    currentYear: cols[5] ? String(cols[5]).trim() : "1",
+                    scholarshipType: cols[6] ? String(cols[6]).trim() : "Not Specified",
                     isRegistered: false
                 }, { merge: true });
 
                 count++;
 
-                if (count % 490 === 0) {
+                if (count > 0 && count % 490 === 0) {
                     await batch.commit();
                     batch = db.batch();
                 }
             }
 
+            if (hasDuplicates) {
+                document.getElementById('fileInput').value = "";
+                return showToast("ERROR: Excel corrupted your PRNs! Format Column A as 'Text' in Excel before pasting.");
+            }
+
             await batch.commit();
-            showToast(`Successfully uploaded ${count} students to Master Roster!`);
+            showToast(`Uploaded ${count} students successfully!`);
             document.getElementById('fileInput').value = "";
             loadStudentDirectory();
 
         } catch (error) {
             console.error("Excel Parsing Error: ", error);
-            showToast("Error reading file. Ensure it is a valid Excel spreadsheet.");
+            showToast("Error reading file. Check the console for details.");
         }
     };
     reader.readAsArrayBuffer(file);
@@ -1638,13 +1695,12 @@ function closeAddStudentModal() {
 
 async function submitSingleStudent(e) {
     e.preventDefault();
-    const grNumber = document.getElementById('addGR').value.toUpperCase().trim();
+    const prn = document.getElementById('addPRN').value.toUpperCase().trim();
     const firstName = document.getElementById('addFirstName').value;
     const lastName = document.getElementById('addLastName').value;
-    const email = document.getElementById('addEmail').value.toLowerCase().trim();
 
     const studentData = {
-        grNumber: grNumber,
+        prn: prn,
         firstName: firstName,
         lastName: lastName,
         name: `${firstName} ${lastName}`,
@@ -1652,18 +1708,15 @@ async function submitSingleStudent(e) {
         joiningYear: document.getElementById('addJoinYear').value,
         currentYear: document.getElementById('addCurrYear').value,
         scholarshipType: document.getElementById('addSchType').value,
-        email: email,
         isRegistered: false
     };
 
     try {
-        await db.collection('master_students').doc(grNumber).set(studentData, { merge: true });
-        showToast(`Student ${grNumber} added to Master Roster.`);
+        await db.collection('master_students').doc(prn).set(studentData, { merge: true });
+        showToast(`Student ${prn} added to Master Roster.`);
         closeAddStudentModal();
         loadStudentDirectory();
-    } catch (err) {
-        showToast("Error adding student.");
-    }
+    } catch (err) { showToast("Error adding student."); }
 }
 
 async function enableAdminEditMode() {
@@ -1680,7 +1733,6 @@ async function enableAdminEditMode() {
         document.getElementById('editJoinYear').value = data.joiningYear || '';
         document.getElementById('editCurrYear').value = data.currentYear || '';
         document.getElementById('editSchType').value = data.scholarshipType || '';
-        document.getElementById('editEmail').value = data.email || '';
 
         document.getElementById('editStudentModal').classList.remove('hidden');
     } catch (error) {
@@ -1702,23 +1754,15 @@ async function submitEditStudent(e) {
     const joiningYear = document.getElementById('editJoinYear').value;
     const currentYear = document.getElementById('editCurrYear').value;
     const scholarshipType = document.getElementById('editSchType').value;
-    const email = document.getElementById('editEmail').value.toLowerCase().trim();
 
     const updatedData = {
-        firstName,
-        lastName,
-        name: `${firstName} ${lastName}`,
-        department,
-        joiningYear,
-        currentYear,
-        scholarshipType,
-        email
+        firstName, lastName, name: `${firstName} ${lastName}`,
+        department, joiningYear, currentYear, scholarshipType
     };
 
     try {
         await db.collection('master_students').doc(activeModalStudentUid).update(updatedData);
-
-        const snap = await db.collection('users').where('grNumber', '==', activeModalStudentUid).get();
+        const snap = await db.collection('users').where('prn', '==', activeModalStudentUid).get();
         if (!snap.empty) {
             await db.collection('users').doc(snap.docs[0].id).update(updatedData);
         }
@@ -1727,7 +1771,6 @@ async function submitEditStudent(e) {
         closeEditStudentModal();
 
         document.getElementById('modalName').textContent = updatedData.name;
-        document.getElementById('modalEmail').textContent = updatedData.email;
         document.getElementById('modalDept').textContent = updatedData.department;
         document.getElementById('modalJoinYr').textContent = updatedData.joiningYear;
         document.getElementById('modalCurrYr').textContent = yearLabels[updatedData.currentYear] || updatedData.currentYear;
@@ -1735,22 +1778,34 @@ async function submitEditStudent(e) {
         document.getElementById('modalInitials').textContent = updatedData.firstName.charAt(0).toUpperCase();
 
         loadStudentDirectory();
-    } catch (err) {
-        showToast("Error updating student.");
-    }
+    } catch (err) { showToast("Error updating student."); }
 }
 
-// --- STUDENT DIRECTORY & MASTER PROFILE ENGINE ---
+// ==================== PIPELINE & ANALYTICS ENGINE ====================
 async function loadStudentDirectory() {
     try {
-        const snap = await db.collection('master_students').get();
-        allStudentsData = [];
-        snap.forEach(doc => {
-            allStudentsData.push(doc.data());
-        });
-        filterDirectory();
+        console.log("Fetching complete pipeline database...");
+
+        const masterSnap = await db.collection('master_students').get();
+        window.rawMasterData = [];
+        masterSnap.forEach(doc => window.rawMasterData.push(doc.data()));
+        window.allStudentsData = window.rawMasterData;
+
+        const usersSnap = await db.collection('users').get();
+        window.rawUsersData = [];
+        usersSnap.forEach(doc => window.rawUsersData.push(doc.data()));
+
+        const appsSnap = await db.collection('appointments').get();
+        window.rawAppsData = [];
+        appsSnap.forEach(doc => window.rawAppsData.push(doc.data()));
+
+        if (typeof filterDirectory === 'function') filterDirectory();
+        if (typeof processUnifiedAnalytics === 'function') processUnifiedAnalytics();
+
     } catch (e) {
-        showToast("Error loading directory.");
+        console.error("Database Load Error:", e);
+        const tbody = document.getElementById('directoryTableBody');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="text-center py-10 text-red-500 font-bold">Error loading database. Check console.</td></tr>`;
     }
 }
 
@@ -1759,16 +1814,13 @@ function filterDirectory() {
     const tbody = document.getElementById('directoryTableBody');
     if (!tbody) return;
 
-    tbody.innerHTML = ''; // Clear the loading text
+    tbody.innerHTML = '';
 
-    const filtered = allStudentsData.filter(s => {
-        // Bulletproof safety checks in case database fields are missing
+    const filtered = window.allStudentsData.filter(s => {
         const safeName = s.name || "";
-        const safeGR = s.grNumber || "";
-        const safeEmail = s.email || "";
+        const safePRN = s.prn || "";
         const safeDept = s.department || "";
-
-        const str = `${safeName} ${safeGR} ${safeEmail} ${safeDept}`.toLowerCase();
+        const str = `${safeName} ${safePRN} ${safeDept}`.toLowerCase();
         return str.includes(query);
     });
 
@@ -1780,13 +1832,15 @@ function filterDirectory() {
     filtered.forEach(s => {
         const tr = document.createElement('tr');
         tr.className = "hover:bg-slate-50 transition-colors cursor-pointer group";
-        tr.onclick = () => openStudentDetailsModal(s);
+
+        tr.onclick = function () {
+            openStudentDetailsModal(s);
+        };
 
         const statusBadge = s.isRegistered
             ? `<span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-[10px] font-black uppercase tracking-wider">Registered</span>`
             : `<span class="px-2 py-1 bg-slate-200 text-slate-600 rounded text-[10px] font-black uppercase tracking-wider">Unregistered</span>`;
 
-        // CRITICAL FIX: Gracefully handle missing names so the avatar doesn't crash the app
         const safeName = s.name || "Unknown Student";
         const initial = safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?";
 
@@ -1798,12 +1852,11 @@ function filterDirectory() {
                     </div>
                     <div>
                         <p class="font-bold text-slate-800">${safeName}</p>
-                        <p class="text-xs text-slate-500 font-mono mt-0.5">${s.email || "No Email"}</p>
                     </div>
                 </div>
             </td>
             <td class="px-6 py-4">
-                <p class="font-bold text-slate-700">${s.grNumber || '--'}</p>
+                <p class="font-bold text-slate-700">${s.prn || '--'}</p>
                 <div class="text-[10px] uppercase font-bold text-slate-400 mt-1 flex items-center gap-2">
                     <span>${s.department || '--'}</span> • <span>${yearLabels[s.currentYear] || s.currentYear || '--'}</span>
                 </div>
@@ -1816,307 +1869,53 @@ function filterDirectory() {
     });
 }
 
-async function openStudentDetailsModal(student) {
-    activeModalStudentUid = student.grNumber;
-
-    // Safety check for corrupt missing names
-    const safeName = student.name || "Unknown Student";
-    document.getElementById('modalInitials').textContent = safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?";
-    document.getElementById('modalName').textContent = safeName;
-
-    document.getElementById('modalEmail').textContent = student.email || "No Email";
-    document.getElementById('modalGR').textContent = student.grNumber;
-    document.getElementById('modalPhone').textContent = student.contactNo || "--";
-    document.getElementById('modalDept').textContent = student.department;
-    document.getElementById('modalJoinYr').textContent = student.joiningYear;
-    document.getElementById('modalCurrYr').textContent = yearLabels[student.currentYear] || student.currentYear;
-    document.getElementById('modalSchType').textContent = student.scholarshipType;
-    document.getElementById('modalMahaDBT').textContent = student.mahadbtId || "Not Provided";
-
-    const tbody = document.getElementById('modalHistoryBody');
-    const statusEl = document.getElementById('modalCurrentStatus');
-    const pendingDocsEl = document.getElementById('modalPendingDocs');
-    const attemptsInfo = document.getElementById('modalAttemptsInfo');
-
-    // UI Elements to toggle based on Registration status
-    const msgBlock = document.getElementById('adminDirectMessageBlock');
-    const fineBlock = document.getElementById('adminFineBlock');
-    const remarkInput = document.getElementById('dirAdminRemarkInput');
-
-    pendingDocsEl.classList.add('hidden');
-    pendingDocsEl.innerHTML = '';
-
-    if (!student.isRegistered || !student.uid) {
-        // --- UNREGISTERED STUDENT STATE ---
-        tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">Student has not created an account yet.</td></tr>`;
-        statusEl.innerHTML = `<span class="text-slate-500 font-bold">Unregistered</span>`;
-        attemptsInfo.innerHTML = `<span class="text-slate-400 text-lg">N/A</span>`;
-
-        // Hide the action blocks because the student doesn't exist in the system yet
-        if (msgBlock) msgBlock.classList.add('hidden');
-        if (fineBlock) fineBlock.classList.add('hidden');
-
-        document.getElementById('studentDetailsModal').classList.remove('hidden');
-        return;
-    }
-
-    // --- REGISTERED STUDENT STATE ---
-    // Reveal the action blocks
-    if (msgBlock) msgBlock.classList.remove('hidden');
-    if (fineBlock) fineBlock.classList.remove('hidden');
-
-    // Load existing remark into the text box
-    if (remarkInput) remarkInput.value = student.adminRemark || "";
-
+function processUnifiedAnalytics() {
     try {
-        const snap = await db.collection('appointments').where('uid', '==', student.uid).get();
-        let apps = [];
-        snap.forEach(doc => apps.push(doc.data()));
+        const appsByPRN = {};
 
-        apps.sort((a, b) => {
-            if (a.date !== b.date) return b.date.localeCompare(a.date);
+        window.rawAppsData.sort((a, b) => {
+            if (a.date !== b.date) return (b.date || "").localeCompare(a.date || "");
             return parseTime(b.time) - parseTime(a.time);
         });
 
-        tbody.innerHTML = '';
-        if (apps.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">No bookings found for this student.</td></tr>`;
-        } else {
-            apps.forEach(app => {
-                let badgeStyle = "bg-slate-100 text-slate-600";
-                let sLabel = app.status || 'waiting';
-                const baseS = sLabel.replace('_closed', '');
-
-                if (baseS === 'verified') badgeStyle = "bg-emerald-100 text-emerald-700";
-                else if (baseS === 'pending') badgeStyle = "bg-amber-100 text-amber-700";
-                else if (baseS === 'no_show') badgeStyle = "bg-red-100 text-red-700";
-                else if (baseS === 'cancelled') badgeStyle = "bg-slate-100 text-slate-500 line-through";
-                else if (baseS === 'current') badgeStyle = "bg-blue-100 text-blue-700";
-
-                tbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="px-4 py-3 font-medium text-slate-700">${app.date} <span class="text-xs text-slate-400 ml-1">${app.time}</span></td>
-                        <td class="px-4 py-3 font-mono text-slate-600 text-xs">${app.token}</td>
-                        <td class="px-4 py-3"><span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${badgeStyle}">${baseS}</span></td>
-                    </tr>
-                `;
-            });
-        }
-
-        const usedAttempts = apps.length;
-        const extraAttempts = student.extraAttempts || 0;
-        const limit = 3 + extraAttempts;
-        const left = Math.max(0, limit - usedAttempts);
-
-        attemptsInfo.innerHTML = `
-            <span class="${left === 0 ? 'text-red-500' : 'text-emerald-600'}">${left} Left</span> 
-            <span class="text-sm text-slate-500 font-medium">/ ${limit} Allowed</span>
-            <span class="block text-[11px] font-bold text-slate-400 mt-1 uppercase tracking-wider">(${usedAttempts} Used, ${extraAttempts} Extra Granted)</span>
-        `;
-
-        const latestApp = apps[0];
-        if (!latestApp) {
-            statusEl.innerHTML = `<span class="text-slate-500">Not Booked Yet</span>`;
-        } else {
-            const baseStatus = latestApp.status.replace('_closed', '');
-            if (baseStatus === 'verified') {
-                statusEl.innerHTML = `<span class="text-emerald-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> Verified</span>`;
-            } else if (baseStatus === 'pending') {
-                statusEl.innerHTML = `<span class="text-amber-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Pending Documents</span>`;
-
-                const req = scholarshipDocs[student.scholarshipType] || [];
-                const ver = latestApp.documentVerification || {};
-                const missing = req.filter(d => !ver[d]);
-
-                if (missing.length > 0) {
-                    pendingDocsEl.classList.remove('hidden');
-                    pendingDocsEl.innerHTML = `<span class="font-bold uppercase tracking-wider text-[10px] block mb-1">Missing Documents:</span> • ${missing.join('<br> • ')}`;
-                }
-            } else if (baseStatus === 'no_show') {
-                statusEl.innerHTML = `<span class="text-red-600">No Show</span>`;
-            } else if (baseStatus === 'cancelled') {
-                statusEl.innerHTML = `<span class="text-slate-500">Cancelled by Student</span>`;
-            } else {
-                statusEl.innerHTML = `<span class="text-blue-600">Slot Booked / Waiting</span>`;
-            }
-        }
-
-        document.getElementById('studentDetailsModal').classList.remove('hidden');
-
-    } catch (e) {
-        showToast("Error loading student history");
-    }
-}
-function closeStudentDetailsModal() {
-    document.getElementById('studentDetailsModal').classList.add('hidden');
-    activeModalStudentUid = null;
-}
-
-
-async function grantExtraAttempts() {
-    if (!activeModalStudentUid) return;
-
-    try {
-        const masterRef = db.collection('master_students').doc(activeModalStudentUid);
-        const doc = await masterRef.get();
-        if (!doc.exists) return;
-
-        const data = doc.data();
-        if (data.uid) {
-            await db.collection('users').doc(data.uid).update({
-                extraAttempts: firebase.firestore.FieldValue.increment(3)
-            });
-        }
-
-        await masterRef.update({
-            extraAttempts: firebase.firestore.FieldValue.increment(3)
+        window.rawAppsData.forEach(app => {
+            if (!appsByPRN[app.prn] && app.status !== 'cancelled') appsByPRN[app.prn] = app;
         });
 
-        showToast("Success! Account Unlocked & Attempts Granted.");
-        closeStudentDetailsModal();
-        loadStudentDirectory();
-    } catch (e) {
-        showToast("Error updating student record.");
-    }
-}
+        const usersByPRN = {};
+        window.rawUsersData.forEach(u => { if (u.prn) usersByPRN[u.prn] = u; });
 
-// --- DIRECTORY MESSAGE ENGINE ---
-async function saveDirectoryMessage() {
-    if (!activeModalStudentUid) return;
+        window.unifiedCollegeData = window.rawMasterData.map(student => {
+            const latestApp = appsByPRN[student.prn];
+            const userProfile = usersByPRN[student.prn] || {};
+            let trueStatus = "unregistered";
+            let lastActive = "--";
 
-    const msg = document.getElementById('dirAdminRemarkInput').value.trim();
-    const btn = document.querySelector('button[onclick="saveDirectoryMessage()"]');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = "Saving...";
-
-    try {
-        // 1. Save to Master Roster (so it persists even if they haven't signed up yet)
-        await db.collection('master_students').doc(activeModalStudentUid).update({ adminRemark: msg });
-
-        // 2. If they have an active account, push it to their live profile instantly
-        const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
-        const data = doc.data();
-        if (data.uid) {
-            await db.collection('users').doc(data.uid).update({ adminRemark: msg });
-        }
-
-        showToast(msg ? "Message Pinned to Student's Dashboard!" : "Message Cleared.");
-    } catch (e) {
-        console.error(e);
-        showToast("Error saving message.");
-    } finally {
-        btn.innerHTML = originalText;
-    }
-}
-window.saveDirectoryMessage = saveDirectoryMessage;
-
-// ==================== REAL-TIME ANALYTICS ENGINE ====================
-// ==================== REAL-TIME ANALYTICS ENGINE ====================
-let liveStatsUnsubscribeMaster = null;
-let liveStatsUnsubscribeApps = null;
-let liveStatsUnsubscribeUsers = null; // NEW
-let rawMasterData = [];
-let rawAppsData = [];
-let rawUsersData = []; // NEW
-window.unifiedCollegeData = [];
-
-function switchReportTab(tab) {
-    const dashBtn = document.getElementById('tabDashboardBtn');
-    const expBtn = document.getElementById('tabExportBtn');
-    const dashSec = document.getElementById('statsDashboardSection');
-    const expSec = document.getElementById('statsExportSection');
-
-    if (tab === 'dashboard') {
-        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
-        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
-        dashSec.classList.remove('hidden');
-        expSec.classList.add('hidden');
-    } else {
-        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
-        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
-        expSec.classList.remove('hidden');
-        dashSec.classList.add('hidden');
-        applyFilters(); // Re-render table
-    }
-}
-
-function startLiveAnalytics() {
-    if (liveStatsUnsubscribeMaster) liveStatsUnsubscribeMaster();
-    if (liveStatsUnsubscribeApps) liveStatsUnsubscribeApps();
-    if (liveStatsUnsubscribeUsers) liveStatsUnsubscribeUsers();
-
-    // Listen to Master Roster
-    liveStatsUnsubscribeMaster = db.collection('master_students').onSnapshot(snap => {
-        rawMasterData = [];
-        snap.forEach(doc => rawMasterData.push(doc.data()));
-        processUnifiedAnalytics();
-    });
-
-    // Listen to all Appointments
-    liveStatsUnsubscribeApps = db.collection('appointments').onSnapshot(snap => {
-        rawAppsData = [];
-        snap.forEach(doc => rawAppsData.push({ id: doc.id, ...doc.data() }));
-        processUnifiedAnalytics();
-    });
-
-    // NEW: Listen to Users to pull their actual Phone & MahaDBT IDs!
-    liveStatsUnsubscribeUsers = db.collection('users').where('role', '==', 'student').onSnapshot(snap => {
-        rawUsersData = [];
-        snap.forEach(doc => rawUsersData.push(doc.data()));
-        processUnifiedAnalytics();
-    });
-}
-
-function processUnifiedAnalytics() {
-    const appsByGR = {};
-    rawAppsData.sort((a, b) => {
-        if (a.date !== b.date) return (b.date || "").localeCompare(a.date || "");
-        return parseTime(b.time) - parseTime(a.time);
-    });
-
-    rawAppsData.forEach(app => {
-        if (!appsByGR[app.grNumber] && app.status !== 'cancelled') {
-            appsByGR[app.grNumber] = app;
-        }
-    });
-
-    // NEW: Map user profiles by GR Number
-    const usersByGR = {};
-    rawUsersData.forEach(u => {
-        if (u.grNumber) usersByGR[u.grNumber] = u;
-    });
-
-    window.unifiedCollegeData = rawMasterData.map(student => {
-        const latestApp = appsByGR[student.grNumber];
-        const userProfile = usersByGR[student.grNumber] || {}; // Pull their live profile
-        let trueStatus = "unregistered";
-        let lastActive = "--";
-
-        if (student.isRegistered) {
-            trueStatus = "not_booked";
-            if (latestApp) {
-                trueStatus = latestApp.status.replace('_closed', '');
-                lastActive = `${latestApp.date} ${latestApp.time}`;
+            if (student.isRegistered) {
+                trueStatus = "not_booked";
+                if (latestApp) {
+                    trueStatus = latestApp.status.replace('_closed', '');
+                    lastActive = `${latestApp.date} ${latestApp.time}`;
+                }
             }
-        }
 
-        return {
-            ...student,
-            // Override master data with their live profile data if they signed up
-            contactNo: userProfile.contactNo || student.contactNo || "",
-            mahadbtId: userProfile.mahadbtId || student.mahadbtId || "",
-            trueStatus: trueStatus,
-            latestApp: latestApp || null,
-            lastActive: lastActive
-        };
-    });
+            return {
+                ...student,
+                contactNo: userProfile.contactNo || student.contactNo || "",
+                mahadbtId: userProfile.mahadbtId || student.mahadbtId || "",
+                trueStatus: trueStatus,
+                latestApp: latestApp || null,
+                lastActive: lastActive
+            };
+        });
 
-    renderLiveDashboard();
-    applyFilters();
+        if (typeof renderLiveDashboard === 'function') renderLiveDashboard();
+        if (typeof applyFilters === 'function') applyFilters();
+
+    } catch (e) { console.error("Analytics Error:", e); }
 }
 
 function renderLiveDashboard() {
-    // 6 exact buckets
     let totals = { roster: 0, unreg: 0, notBooked: 0, booked: 0, verified: 0, pending: 0, noShow: 0 };
     let deptStats = {};
 
@@ -2125,10 +1924,8 @@ function renderLiveDashboard() {
         if (!deptStats[s.department]) {
             deptStats[s.department] = { total: 0, unreg: 0, notBooked: 0, booked: 0, verified: 0, pending: 0, noShow: 0 };
         }
-
         deptStats[s.department].total++;
 
-        // No ambiguity, map directly to trueStatus
         if (s.trueStatus === 'unregistered') { totals.unreg++; deptStats[s.department].unreg++; }
         else if (s.trueStatus === 'not_booked') { totals.notBooked++; deptStats[s.department].notBooked++; }
         else if (s.trueStatus === 'waiting' || s.trueStatus === 'current') { totals.booked++; deptStats[s.department].booked++; }
@@ -2137,7 +1934,6 @@ function renderLiveDashboard() {
         else if (s.trueStatus === 'no_show') { totals.noShow++; deptStats[s.department].noShow++; }
     });
 
-    // Update Global Cards
     if (document.getElementById('dashTotal')) {
         document.getElementById('dashTotal').textContent = totals.roster;
         document.getElementById('dashVerified').textContent = totals.verified;
@@ -2148,7 +1944,6 @@ function renderLiveDashboard() {
         document.getElementById('dashUnregistered').textContent = totals.unreg;
     }
 
-    // Render Department Grid
     const grid = document.getElementById('departmentStatsGrid');
     if (!grid) return;
     grid.innerHTML = '';
@@ -2199,6 +1994,26 @@ function renderLiveDashboard() {
     });
 }
 
+function switchReportTab(tab) {
+    const dashBtn = document.getElementById('tabDashboardBtn');
+    const expBtn = document.getElementById('tabExportBtn');
+    const dashSec = document.getElementById('statsDashboardSection');
+    const expSec = document.getElementById('statsExportSection');
+
+    if (tab === 'dashboard') {
+        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
+        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
+        dashSec.classList.remove('hidden');
+        expSec.classList.add('hidden');
+    } else {
+        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
+        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
+        expSec.classList.remove('hidden');
+        dashSec.classList.add('hidden');
+        applyFilters();
+    }
+}
+
 function applyFilters() {
     const fDept = document.getElementById('filterDept').value;
     const fYear = document.getElementById('filterYear').value;
@@ -2226,15 +2041,12 @@ function applyFilters() {
         let label = s.trueStatus;
         let statusDetails = "";
 
-        // Smart Status Parsing & Detail Generation
         if (s.trueStatus === 'verified') {
             badgeStyle = "bg-emerald-100 text-emerald-700"; label = "Verified";
             statusDetails = `<span class="text-emerald-600 font-medium">Verified on ${s.latestApp ? s.latestApp.date : ''}</span>`;
         }
         else if (s.trueStatus === 'pending') {
             badgeStyle = "bg-amber-100 text-amber-700"; label = "Docs Pending";
-
-            // Calculate exact missing docs to show the Admin
             const req = scholarshipDocs[s.scholarshipType] || [];
             const ver = s.latestApp && s.latestApp.documentVerification ? s.latestApp.documentVerification : {};
             const missing = req.filter(d => !ver[d]);
@@ -2262,12 +2074,8 @@ function applyFilters() {
             statusDetails = `<span class="text-violet-500 font-medium">Needs to book a slot</span>`;
         }
 
-        // Clean UI Fallbacks: Remove all fake "Missing" text completely
-        const dbtHtml = s.mahadbtId
-            ? `<p class="text-[10px] uppercase font-bold text-slate-400 mt-0.5">MahaDBT: <span class="text-emerald-600">${s.mahadbtId}</span></p>`
-            : ``;
-        const emailHtml = s.email ? s.email : ``;
-        const phoneHtml = s.contactNo ? `<br>${s.contactNo}` : ``;
+        const dbtHtml = s.mahadbtId ? `<p class="text-[10px] uppercase font-bold text-slate-400 mt-0.5">MahaDBT: <span class="text-emerald-600">${s.mahadbtId}</span></p>` : ``;
+        const phoneHtml = s.contactNo ? s.contactNo : `--`;
 
         tbody.innerHTML += `
             <tr class="hover:bg-slate-50 transition-colors">
@@ -2275,13 +2083,13 @@ function applyFilters() {
                     <p class="font-bold text-slate-800">${s.name}</p>
                     ${dbtHtml}
                 </td>
-                <td class="px-4 py-3 font-mono text-slate-600 font-bold">${s.grNumber}</td>
+                <td class="px-4 py-3 font-mono text-slate-600 font-bold">${s.prn}</td>
                 <td class="px-4 py-3 text-xs">
                     <span class="font-bold text-slate-700">${s.department}</span><br>
                     <span class="text-slate-500">${yearLabels[s.currentYear] || s.currentYear}</span>
                 </td>
-                <td class="px-4 py-3 text-xs text-slate-500">
-                    ${emailHtml}${phoneHtml}
+                <td class="px-4 py-3 text-xs text-slate-500 font-medium">
+                    ${phoneHtml}
                 </td>
                 <td class="px-4 py-3">
                     <span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${badgeStyle}">${label}</span>
@@ -2298,27 +2106,21 @@ function downloadCSV() {
     const data = window.currentFilteredData || [];
     if (data.length === 0) return showToast("No data to export!");
 
-    // Professional headers for Principal/HOD review
-    let csvContent = "Student Name,GR Number,Department,Joining Year,Current Year,Scholarship Category,MahaDBT App ID,Email ID,Contact Number,Verification Status,Remarks / Missing Documents\n";
+    let csvContent = "Student Name,PRN,Department,Joining Year,Current Year,Scholarship Category,MahaDBT App ID,Contact Number,Verification Status,Remarks / Missing Documents\n";
 
     data.forEach(s => {
-        // Clean and format data points
         const name = `"${(s.name || "").replace(/"/g, '""')}"`;
-        const gr = s.grNumber || "";
+        const prn = s.prn || "";
         const dept = s.department || "";
         const joinYr = s.joiningYear || "";
         const currYr = yearLabels[s.currentYear] ? `"${yearLabels[s.currentYear]}"` : (s.currentYear || "");
         const cat = s.scholarshipType || "";
         const dbt = s.mahadbtId || "Not Provided";
-        const email = s.email || "";
-
-        // FIX: Force Excel to treat phone numbers as text to prevent the 9.88E+09 scientific notation bug
         const phone = s.contactNo ? `="${s.contactNo}"` : "Not Provided";
 
         let statLabel = "Unknown";
         let details = "";
 
-        // Standardized, clear status labels and informative remarks
         if (s.trueStatus === 'verified') {
             statLabel = "Verified";
             details = `Successfully verified on ${s.latestApp ? s.latestApp.date : ''}`;
@@ -2347,23 +2149,18 @@ function downloadCSV() {
             details = "Student has not signed up on the portal yet";
         }
 
-        // Wrap details in quotes to prevent internal commas from breaking the CSV layout
-        csvContent += `${name},${gr},${dept},${joinYr},${currYr},${cat},${dbt},${email},${phone},${statLabel},"${details}"\n`;
+        csvContent += `${name},${prn},${dept},${joinYr},${currYr},${cat},${dbt},${phone},${statLabel},"${details}"\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-
-    // Official naming convention with date
     link.setAttribute("download", `ScholarSwift_Verification_Report_${new Date().toISOString().split('T')[0]}.csv`);
-
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
     showToast("Official Report CSV Downloaded!");
 }
 
@@ -2483,93 +2280,6 @@ async function generateAvailableTimeSlots(selectedDate) {
     } catch (error) { showToast("Error checking availability."); }
 }
 
-async function bookSlot() {
-    const d = document.getElementById('slotDate').value;
-    const t = document.getElementById('slotTime').value;
-    if (!d || !t) return showToast("Pick Date and Time");
-
-    const btn = document.getElementById('bookSlotBtn');
-    const originalText = btn.textContent;
-    btn.textContent = "Booking...";
-    btn.disabled = true;
-
-    try {
-        const slotCheckSnap = await db.collection('appointments').where('date', '==', d).get();
-        let isSlotTaken = false;
-        slotCheckSnap.forEach(doc => {
-            const data = doc.data();
-            if (data.time === t && data.status !== 'cancelled') {
-                isSlotTaken = true;
-            }
-        });
-
-        if (isSlotTaken) {
-            generateAvailableTimeSlots(d);
-            btn.textContent = originalText;
-            btn.disabled = false;
-            return showToast("Oops! Someone just booked this exact slot. Please pick another.");
-        }
-
-        const snap = await db.collection('appointments').where('uid', '==', currentUser.uid).get();
-        let pastApps = [];
-        snap.forEach(doc => pastApps.push(doc.data()));
-
-        const extraAttempts = currentUser.extraAttempts || 0;
-        // ALL statuses (including 'cancelled') now consume 1 of their 3 attempts.
-        const usedAttempts = pastApps.length;
-
-        const limit = 3 + extraAttempts;
-
-        if (usedAttempts >= limit) {
-            btn.textContent = originalText;
-            btn.disabled = false;
-            return showToast("Booking limit exceeded! Please visit Admin.");
-        }
-
-        if (pastApps.some(app => String(app.status).includes('verified'))) {
-            btn.textContent = originalText;
-            btn.disabled = false;
-            return showToast("You are already verified for this academic year!");
-        }
-
-        const hasActiveBooking = pastApps.some(app =>
-            ['waiting', 'current'].includes(app.status)
-        );
-
-        if (hasActiveBooking) {
-            btn.textContent = originalText;
-            btn.disabled = false;
-            return showToast("You already have an active waiting slot!");
-        }
-
-        const correctToken = getSlotTokenNumber(t);
-        await db.collection('appointments').add({
-            uid: currentUser.uid,
-            name: currentUser.name,
-            email: currentUser.email,
-            contactNo: currentUser.contactNo,
-            joiningYear: currentUser.joiningYear,
-            currentYear: currentUser.currentYear,
-            scholarshipType: currentUser.scholarshipType,
-            grNumber: currentUser.grNumber,
-            mahadbtId: currentUser.mahadbtId,
-            department: currentUser.department,
-            date: d,
-            time: t,
-            status: 'waiting',
-            token: correctToken
-        });
-
-        showToast(`Slot Booked! Your Token is ${correctToken}`);
-    } catch (e) {
-        console.error("Firebase Booking Error:", e);
-        showToast("Booking Failed - Check Console");
-    } finally {
-        btn.textContent = originalText;
-        btn.disabled = false;
-    }
-}
-
 async function toggleMahadbtWindow() {
     try {
         await db.collection('settings').doc('lifecycle').set({
@@ -2593,6 +2303,134 @@ async function promptUpdateAcademicYear() {
 
 window.toggleMahadbtWindow = toggleMahadbtWindow;
 window.promptUpdateAcademicYear = promptUpdateAcademicYear;
+
+async function grantExtraAttempts() {
+    if (!activeModalStudentUid) return;
+
+    try {
+        const masterRef = db.collection('master_students').doc(activeModalStudentUid);
+        const doc = await masterRef.get();
+        if (!doc.exists) return;
+
+        const data = doc.data();
+        if (data.uid) {
+            await db.collection('users').doc(data.uid).update({
+                extraAttempts: firebase.firestore.FieldValue.increment(3)
+            });
+        }
+
+        await masterRef.update({
+            extraAttempts: firebase.firestore.FieldValue.increment(3)
+        });
+
+        showToast("Success! Account Unlocked & Attempts Granted.");
+        closeStudentDetailsModal();
+        loadStudentDirectory();
+    } catch (e) {
+        showToast("Error updating student record.");
+    }
+}
+
+async function saveDirectoryMessage() {
+    if (!activeModalStudentUid) return;
+
+    const msg = document.getElementById('dirAdminRemarkInput').value.trim();
+    const btn = document.querySelector('button[onclick="saveDirectoryMessage()"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Saving...";
+
+    try {
+        await db.collection('master_students').doc(activeModalStudentUid).update({ adminRemark: msg });
+        const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
+        const data = doc.data();
+        if (data.uid) {
+            await db.collection('users').doc(data.uid).update({ adminRemark: msg });
+        }
+        showToast(msg ? "Message Pinned to Student's Dashboard!" : "Message Cleared.");
+    } catch (e) {
+        showToast("Error saving message.");
+    } finally {
+        btn.innerHTML = originalText;
+    }
+}
+window.saveDirectoryMessage = saveDirectoryMessage;
+
+
+// ==========================================
+// BROADCAST ANNOUNCEMENT ENGINE
+// ==========================================
+async function submitAnnouncement(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSendBroadcast');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Publishing...";
+    btn.disabled = true;
+
+    try {
+        const payload = {
+            message: document.getElementById('announceMsg').value.trim(),
+            targetDept: document.getElementById('announceDept').value,
+            targetYear: document.getElementById('announceYear').value,
+            targetStatus: document.getElementById('announceStatus').value,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            timestampString: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
+        };
+        await db.collection('announcements').add(payload);
+        showToast("Announcement Broadcasted Successfully!");
+        document.getElementById('announcementForm').reset();
+    } catch (err) {
+        showToast("Error broadcasting announcement.");
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+window.submitAnnouncement = submitAnnouncement;
+
+async function deleteAnnouncement(id) {
+    if (!confirm("Delete this announcement permanently?")) return;
+    try {
+        await db.collection('announcements').doc(id).delete();
+        showToast("Announcement deleted.");
+    } catch (e) { showToast("Error deleting announcement."); }
+}
+window.deleteAnnouncement = deleteAnnouncement;
+
+function initAdminAnnouncementListener() {
+    if (window.adminAnnounceListener) return;
+    window.adminAnnounceListener = db.collection('announcements').orderBy('createdAt', 'desc').onSnapshot(snap => {
+        const tbody = document.getElementById('adminAnnouncementsLog');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        if (snap.empty) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center py-10 text-slate-400 italic">No past announcements.</td></tr>`;
+            return;
+        }
+
+        snap.forEach(doc => {
+            const data = doc.data();
+            const tagClass = "inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest mr-1 mb-1 shadow-sm border";
+            let filtersHTML = "";
+            filtersHTML += `<span class="${tagClass} ${data.targetDept === 'ALL' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-100 text-blue-700 border-blue-200'}">DEPT: ${data.targetDept}</span>`;
+            filtersHTML += `<span class="${tagClass} ${data.targetYear === 'ALL' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'}">YR: ${data.targetYear}</span>`;
+            filtersHTML += `<span class="${tagClass} ${data.targetStatus === 'ALL' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-amber-100 text-amber-700 border-amber-200'}">STATUS: ${data.targetStatus}</span>`;
+
+            tbody.innerHTML += `
+                <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-6 py-4 font-bold text-slate-600 text-xs whitespace-nowrap">${data.timestampString || 'Just now'}</td>
+                    <td class="px-6 py-4 text-slate-800 font-medium">${data.message}</td>
+                    <td class="px-6 py-4">${filtersHTML}</td>
+                    <td class="px-6 py-4">
+                        <button onclick="deleteAnnouncement('${doc.id}')" class="p-1.5 bg-red-50 text-red-500 hover:bg-red-100 rounded-md transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    });
+}
 
 // ==================== WINDOW EXPORTS ====================
 window.setUserType = setUserType;
@@ -2628,12 +2466,9 @@ window.toggleEditProfile = () => {
         inputArea.classList.add('hidden');
         lockedArea.classList.remove('hidden');
         saveBtn.classList.add('hidden');
-
-        // Explicitly show the year it belongs to!
         const displayYear = currentUser.mahadbtYear || window.systemAcademicYear || "2025-2026";
         document.getElementById('lockedYearDisplay').textContent = displayYear;
     }
-
     modal.classList.remove('hidden');
 };
 
@@ -2641,23 +2476,21 @@ window.saveProfileUpdate = async () => {
     const id = document.getElementById('editMahadbtId').value.trim();
     if (!id) return showToast("Please enter a valid Application ID");
 
-    // Save both the ID and stamp it with the current System Year
     await db.collection('users').doc(currentUser.uid).update({
-        mahadbtId: id,
-        mahadbtYear: window.systemAcademicYear
+        mahadbtId: id, mahadbtYear: window.systemAcademicYear
     });
-    await db.collection('master_students').doc(currentUser.grNumber).update({
-        mahadbtId: id,
-        mahadbtYear: window.systemAcademicYear
+    await db.collection('master_students').doc(currentUser.prn).update({
+        mahadbtId: id, mahadbtYear: window.systemAcademicYear
     });
 
     currentUser.mahadbtId = id;
     currentUser.mahadbtYear = window.systemAcademicYear;
 
     document.getElementById('updateProfileModal').classList.add('hidden');
-    showStudentDashboard(); // This will trigger a refresh to show the new stamp
+    showStudentDashboard();
     showToast(`MahaDBT ID Updated for ${window.systemAcademicYear}`);
 };
+
 window.toggleLiveQueue = () => document.getElementById('liveQueueSection').classList.toggle('hidden');
 window.closeUpdateModal = () => document.getElementById('updateProfileModal').classList.add('hidden');
 window.updateActiveStatus = updateActiveStatus;
@@ -2674,14 +2507,11 @@ window.toggleNotifications = toggleNotifications;
 window.openCancelModal = openCancelModal;
 window.closeCancelModal = closeCancelModal;
 window.confirmCancelBooking = confirmCancelBooking;
-
 window.closeEditStudentModal = closeEditStudentModal;
 window.submitEditStudent = submitEditStudent;
-
 window.openActionConfirmModal = openActionConfirmModal;
 window.closeActionConfirmModal = closeActionConfirmModal;
 window.executeConfirmedAction = executeConfirmedAction;
-
 window.openRemarkConfirmModal = openRemarkConfirmModal;
 window.closeRemarkConfirmModal = closeRemarkConfirmModal;
 window.confirmAndSaveRemark = confirmAndSaveRemark;

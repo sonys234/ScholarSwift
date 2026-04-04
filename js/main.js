@@ -285,7 +285,6 @@ function startLiveClock() {
     updateTime();
     setInterval(updateTime, 1000);
 }
-
 function listenToQueueSettings() {
     db.collection('settings').doc('queueStatus').onSnapshot(doc => {
         if (doc.exists) {
@@ -609,6 +608,7 @@ async function handleAuth(event) {
                         scholarshipType: masterData.scholarshipType,
                         role: 'student',
                         extraAttempts: 0,
+                        adminRemark: masterData.adminRemark || "", // NEW: Inherit directory messages!
                         scholarId: `${masterData.department}${Math.floor(100 + Math.random() * 900)}`
                     };
 
@@ -777,14 +777,16 @@ function showStudentDashboard() {
             }
 
             // NEW: Handle Admin Remarks Display
+            // Handle Admin Remarks Display (Directory Message overrides Appointment Remarks)
             const remarksBlock = document.getElementById('studentRemarksBlock');
             const remarkTextEl = document.getElementById('studentRemarkText');
 
             const relevantApp = activeApp || allApps[0];
+            const displayRemark = currentUser.adminRemark || (relevantApp ? relevantApp.remarks : '');
 
-            if (relevantApp && relevantApp.remarks && relevantApp.remarks.trim() !== '') {
+            if (displayRemark && displayRemark.trim() !== '') {
                 if (remarksBlock) remarksBlock.classList.remove('hidden');
-                if (remarkTextEl) remarkTextEl.textContent = `"${relevantApp.remarks}"`;
+                if (remarkTextEl) remarkTextEl.textContent = `"${displayRemark}"`;
             } else {
                 if (remarksBlock) remarksBlock.classList.add('hidden');
             }
@@ -1808,16 +1810,35 @@ async function openStudentDetailsModal(student) {
     const pendingDocsEl = document.getElementById('modalPendingDocs');
     const attemptsInfo = document.getElementById('modalAttemptsInfo');
 
+    // UI Elements to toggle based on Registration status
+    const msgBlock = document.getElementById('adminDirectMessageBlock');
+    const fineBlock = document.getElementById('adminFineBlock');
+    const remarkInput = document.getElementById('dirAdminRemarkInput');
+
     pendingDocsEl.classList.add('hidden');
     pendingDocsEl.innerHTML = '';
 
     if (!student.isRegistered || !student.uid) {
+        // --- UNREGISTERED STUDENT STATE ---
         tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">Student has not created an account yet.</td></tr>`;
         statusEl.innerHTML = `<span class="text-slate-500 font-bold">Unregistered</span>`;
         attemptsInfo.innerHTML = `<span class="text-slate-400 text-lg">N/A</span>`;
+
+        // Hide the action blocks because the student doesn't exist in the system yet
+        if (msgBlock) msgBlock.classList.add('hidden');
+        if (fineBlock) fineBlock.classList.add('hidden');
+
         document.getElementById('studentDetailsModal').classList.remove('hidden');
         return;
     }
+
+    // --- REGISTERED STUDENT STATE ---
+    // Reveal the action blocks
+    if (msgBlock) msgBlock.classList.remove('hidden');
+    if (fineBlock) fineBlock.classList.remove('hidden');
+
+    // Load existing remark into the text box
+    if (remarkInput) remarkInput.value = student.adminRemark || "";
 
     try {
         const snap = await db.collection('appointments').where('uid', '==', student.uid).get();
@@ -1826,7 +1847,6 @@ async function openStudentDetailsModal(student) {
 
         apps.sort((a, b) => {
             if (a.date !== b.date) return b.date.localeCompare(a.date);
-            // FIX: Keep Admin modal sorting consistent with student view
             return parseTime(b.time) - parseTime(a.time);
         });
 
@@ -1855,7 +1875,7 @@ async function openStudentDetailsModal(student) {
             });
         }
 
-        const usedAttempts = apps.length; // Cancelled slots now count against the limit
+        const usedAttempts = apps.length;
         const extraAttempts = student.extraAttempts || 0;
         const limit = 3 + extraAttempts;
         const left = Math.max(0, limit - usedAttempts);
@@ -1899,11 +1919,11 @@ async function openStudentDetailsModal(student) {
         showToast("Error loading student history");
     }
 }
-
 function closeStudentDetailsModal() {
     document.getElementById('studentDetailsModal').classList.add('hidden');
     activeModalStudentUid = null;
 }
+
 
 async function grantExtraAttempts() {
     if (!activeModalStudentUid) return;
@@ -1931,6 +1951,36 @@ async function grantExtraAttempts() {
         showToast("Error updating student record.");
     }
 }
+
+// --- DIRECTORY MESSAGE ENGINE ---
+async function saveDirectoryMessage() {
+    if (!activeModalStudentUid) return;
+
+    const msg = document.getElementById('dirAdminRemarkInput').value.trim();
+    const btn = document.querySelector('button[onclick="saveDirectoryMessage()"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Saving...";
+
+    try {
+        // 1. Save to Master Roster (so it persists even if they haven't signed up yet)
+        await db.collection('master_students').doc(activeModalStudentUid).update({ adminRemark: msg });
+
+        // 2. If they have an active account, push it to their live profile instantly
+        const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
+        const data = doc.data();
+        if (data.uid) {
+            await db.collection('users').doc(data.uid).update({ adminRemark: msg });
+        }
+
+        showToast(msg ? "Message Pinned to Student's Dashboard!" : "Message Cleared.");
+    } catch (e) {
+        console.error(e);
+        showToast("Error saving message.");
+    } finally {
+        btn.innerHTML = originalText;
+    }
+}
+window.saveDirectoryMessage = saveDirectoryMessage;
 
 // ==================== REAL-TIME ANALYTICS ENGINE ====================
 // ==================== REAL-TIME ANALYTICS ENGINE ====================

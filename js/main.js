@@ -672,6 +672,44 @@ function showStudentDashboard() {
         if (el) el.textContent = value || "--";
     }
 
+    // Helper function to update the remark banner dynamically
+    function refreshRemarkBanner() {
+        const remarksBlock = document.getElementById('studentRemarksBlock');
+        const remarkTextEl = document.getElementById('studentRemarkText');
+
+        const relevantApp = window.currentStudentActiveApp || (window.allStudentApps && window.allStudentApps[0]);
+        const displayRemark = currentUser.adminRemark || (relevantApp ? relevantApp.remarks : '');
+
+        if (displayRemark && displayRemark.trim() !== '') {
+            if (remarksBlock) remarksBlock.classList.remove('hidden');
+            if (remarkTextEl) remarkTextEl.textContent = `"${displayRemark}"`;
+        } else {
+            if (remarksBlock) remarksBlock.classList.add('hidden');
+        }
+    }
+
+    // NEW: Real-time listener for the User Profile (Catches live Admin Remarks & Extra Attempts instantly)
+    if (!window.userProfileListener) {
+        window.userProfileListener = db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
+            if (doc.exists) {
+                currentUser = { ...currentUser, ...doc.data() };
+                refreshRemarkBanner(); // Instantly update the message
+
+                // Instantly update attempts if Admin grants them
+                if (window.allStudentApps) {
+                    const attemptsEl = document.getElementById('profileAttempts');
+                    if (attemptsEl) {
+                        const usedAttempts = window.allStudentApps.length;
+                        const extraAttempts = currentUser.extraAttempts || 0;
+                        const attemptsLeft = Math.max(0, (3 + extraAttempts) - usedAttempts);
+                        attemptsEl.textContent = `${attemptsLeft}/${3 + extraAttempts}`;
+                        attemptsEl.className = attemptsLeft === 0 ? "font-bold text-red-500 text-lg" : "font-bold text-emerald-600 text-lg";
+                    }
+                }
+            }
+        });
+    }
+
     db.collection('appointments').where('uid', '==', currentUser.uid)
         .onSnapshot(snap => {
             const bookingContainer = document.getElementById('bookingContainer');
@@ -685,6 +723,8 @@ function showStudentDashboard() {
                 if (a.date !== b.date) return b.date.localeCompare(a.date);
                 return parseTime(b.time) - parseTime(a.time);
             });
+
+            window.allStudentApps = allApps; // Save globally so the profile listener can use it
 
             const usedAttempts = allApps.length;
             const extraAttempts = currentUser.extraAttempts || 0;
@@ -776,20 +816,8 @@ function showStudentDashboard() {
                 statusIcon.innerHTML = `<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svg}</svg>`;
             }
 
-            // NEW: Handle Admin Remarks Display
-            // Handle Admin Remarks Display (Directory Message overrides Appointment Remarks)
-            const remarksBlock = document.getElementById('studentRemarksBlock');
-            const remarkTextEl = document.getElementById('studentRemarkText');
-
-            const relevantApp = activeApp || allApps[0];
-            const displayRemark = currentUser.adminRemark || (relevantApp ? relevantApp.remarks : '');
-
-            if (displayRemark && displayRemark.trim() !== '') {
-                if (remarksBlock) remarksBlock.classList.remove('hidden');
-                if (remarkTextEl) remarkTextEl.textContent = `"${displayRemark}"`;
-            } else {
-                if (remarksBlock) remarksBlock.classList.add('hidden');
-            }
+            // Call the helper to update the remarks banner!
+            refreshRemarkBanner();
 
             const historyBody = document.getElementById('studentHistoryBody');
             if (historyBody) {

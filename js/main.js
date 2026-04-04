@@ -85,9 +85,9 @@ const deptToDay = {
     'AIML': { day: 2, name: 'Tuesday' },
     'COMP': { day: 3, name: 'Wednesday' },
     'IT': { day: 4, name: 'Thursday' }, // Fixed: Moved from Friday to Thursday
-    'MECH': { day: 5, name: 'Friday' }, // Fixed: Moved from Saturday to Friday
-    'CIVIL': { day: 5, name: 'Friday' }, // Fixed: Moved from Saturday to Friday
-    'AUTOMOBILE': { day: 5, name: 'Friday' } // Fixed: Moved from Saturday to Friday
+    'MECH': { day: 6, name: 'Saturday' }, // Fixed: Moved from Saturday to Friday
+    'CIVIL': { day: 6, name: 'Saturday' }, // Fixed: Moved from Saturday to Friday
+    'AUTOMOBILE': { day: 6, name: 'Saturday' } // Fixed: Moved from Saturday to Friday
 };
 
 // ==================== HELPER FUNCTIONS ====================
@@ -657,7 +657,6 @@ function showStudentDashboard() {
     document.getElementById('authPage').classList.add('hidden');
     document.getElementById('studentDashboard').classList.remove('hidden');
 
-    // Fallback to the current system year if the student's record doesn't have a year stamped yet
     const displayYear = currentUser.mahadbtYear || window.systemAcademicYear || "2025-2026";
 
     const fields = {
@@ -684,11 +683,9 @@ function showStudentDashboard() {
 
             allApps.sort((a, b) => {
                 if (a.date !== b.date) return b.date.localeCompare(a.date);
-                // FIX: Sort time DESCENDING so the newest app is always first
                 return parseTime(b.time) - parseTime(a.time);
             });
 
-            // FIX: explicitly count ALL apps (including cancellations)
             const usedAttempts = allApps.length;
             const extraAttempts = currentUser.extraAttempts || 0;
             const attemptsLeft = Math.max(0, (3 + extraAttempts) - usedAttempts);
@@ -758,7 +755,6 @@ function showStudentDashboard() {
 
                     if (latestApp) {
                         const baseLatest = latestApp.status.replace('_closed', '');
-                        // FIX: Updated logic to correctly identify cancellation
                         if (baseLatest === 'cancelled') {
                             subtextHtml = missingHtml + `<p class="mb-2 text-slate-500 text-sm border-l-2 border-slate-300 pl-2"><em>Note: You cancelled your last appointment. <span class="text-red-500 font-bold">This attempt was deducted from your limit.</span></em></p><p class="font-medium text-emerald-600">${promptText}</p>`;
                         } else if (baseLatest === 'no_show') {
@@ -778,6 +774,19 @@ function showStudentDashboard() {
                 statusSub.innerHTML = subtextHtml;
                 statusIcon.className = `hidden md:flex w-14 h-14 rounded-full items-center justify-center shadow-inner shrink-0 ml-4 ${iconBg} ${iconText}`;
                 statusIcon.innerHTML = `<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svg}</svg>`;
+            }
+
+            // NEW: Handle Admin Remarks Display
+            const remarksBlock = document.getElementById('studentRemarksBlock');
+            const remarkTextEl = document.getElementById('studentRemarkText');
+
+            const relevantApp = activeApp || allApps[0];
+
+            if (relevantApp && relevantApp.remarks && relevantApp.remarks.trim() !== '') {
+                if (remarksBlock) remarksBlock.classList.remove('hidden');
+                if (remarkTextEl) remarkTextEl.textContent = `"${relevantApp.remarks}"`;
+            } else {
+                if (remarksBlock) remarksBlock.classList.add('hidden');
             }
 
             const historyBody = document.getElementById('studentHistoryBody');
@@ -1106,6 +1115,7 @@ function toggleAdminView(view) {
         if (liveView) liveView.classList.remove('hidden');
     }
 }
+
 async function refreshActiveStudentDisplay() {
     const snap = await db.collection('appointments').where('status', 'in', ['current', 'verified', 'pending', 'no_show']).limit(1).get();
 
@@ -1115,13 +1125,16 @@ async function refreshActiveStudentDisplay() {
     const startTimerBtn = document.getElementById('startTimerBtn');
     const timerContainer = document.getElementById('timerContainer');
 
+    // Grab the new remark elements
+    const remarksInput = document.getElementById('adminRemarksInput');
+    const saveRemarkBtn = document.getElementById('saveRemarkBtn');
+
     container.classList.remove('bg-emerald-50', 'bg-red-50', 'bg-slate-100', 'border-emerald-500', 'border-red-500', 'border-slate-400');
     if (timerContainer) timerContainer.classList.remove('ring-4', 'ring-red-500', 'bg-red-50');
 
     const oldFlag = document.getElementById('resultFlag');
     if (oldFlag) oldFlag.remove();
 
-    // FIX: Look for the NEW modal functions to hide the action buttons correctly
     const actionButtons = document.querySelectorAll(`
         button[onclick*="openActionConfirmModal('verified')"], 
         button[onclick*="openActionConfirmModal('pending')"], 
@@ -1134,6 +1147,11 @@ async function refreshActiveStudentDisplay() {
         const data = docRef.data();
         const status = data.status;
 
+        // Pre-fill the remarks box
+        if (remarksInput) {
+            remarksInput.value = data.remarks || '';
+        }
+
         document.getElementById('activeStudentName').textContent = data.name;
         document.getElementById('activeStudentGR').textContent = data.grNumber;
         document.getElementById('activeMahaDBT').textContent = data.mahadbtId || "--";
@@ -1145,6 +1163,7 @@ async function refreshActiveStudentDisplay() {
         }
 
         if (['verified', 'pending', 'no_show'].includes(status)) {
+            // STUDENT IS FINISHED
             isTimerRunning = false;
             const flag = document.createElement('div');
             flag.id = 'resultFlag';
@@ -1165,13 +1184,22 @@ async function refreshActiveStudentDisplay() {
             }
 
             container.appendChild(flag);
-
-            // Successfully hides the buttons now!
             actionButtons.forEach(btn => btn.classList.add('hidden'));
 
             if (startTimerBtn) startTimerBtn.classList.add('hidden');
             if (sessionCountdown) clearInterval(sessionCountdown);
+
+            // NEW: Lock the remarks field since the status is finalized
+            if (remarksInput) {
+                remarksInput.readOnly = true;
+                remarksInput.classList.add('bg-slate-100', 'text-slate-500', 'cursor-not-allowed');
+                remarksInput.classList.remove('bg-white');
+                if (!data.remarks) remarksInput.value = "No remark provided.";
+            }
+            if (saveRemarkBtn) saveRemarkBtn.classList.add('hidden');
+
         } else {
+            // STUDENT IS CURRENTLY AT THE DESK
             if (!isTimerRunning && status === 'current') {
                 isTimerRunning = true;
                 startSessionTimer(420);
@@ -1180,6 +1208,14 @@ async function refreshActiveStudentDisplay() {
                 }
             }
             if (startTimerBtn) startTimerBtn.classList.add('hidden');
+
+            // NEW: Unlock the remarks field since the student is currently active
+            if (remarksInput) {
+                remarksInput.readOnly = false;
+                remarksInput.classList.remove('bg-slate-100', 'text-slate-500', 'cursor-not-allowed');
+                remarksInput.classList.add('bg-white');
+            }
+            if (saveRemarkBtn) saveRemarkBtn.classList.remove('hidden');
         }
 
         const studentData = { scholarshipType: data.scholarshipType };
@@ -1187,9 +1223,20 @@ async function refreshActiveStudentDisplay() {
         renderDocumentChecklist(studentData, appointmentData);
 
     } else {
+        // QUEUE IS EMPTY
         isTimerRunning = false;
         document.getElementById('activeStudentName').textContent = "Desk Available";
         document.getElementById('docProgress').textContent = "0/0 Verified";
+
+        // Lock and clear box when desk is empty
+        if (remarksInput) {
+            remarksInput.value = '';
+            remarksInput.readOnly = true;
+            remarksInput.classList.add('bg-slate-100', 'text-slate-500', 'cursor-not-allowed');
+            remarksInput.classList.remove('bg-white');
+        }
+        if (saveRemarkBtn) saveRemarkBtn.classList.add('hidden');
+
         if (startTimerBtn) startTimerBtn.classList.add('hidden');
         checklistDiv.innerHTML = `<div class="flex flex-col items-center justify-center py-12 text-center text-slate-300 animate-pulse"><svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><h4 class="font-bold">Queue is Empty</h4></div>`;
         document.getElementById('adminCurrentToken').textContent = "TOKEN: --";
@@ -1198,7 +1245,6 @@ async function refreshActiveStudentDisplay() {
         document.getElementById('activeSchType').textContent = "--";
     }
 }
-
 async function manualStartTimer() {
     isTimerRunning = true;
     const startBtn = document.getElementById('startTimerBtn');
@@ -1286,9 +1332,14 @@ async function updateActiveStatus(newStatus) {
             }
         }
 
+        // NEW: Capture Admin Remarks before updating the database
+        const remarksInput = document.getElementById('adminRemarksInput');
+        const remarkText = remarksInput ? remarksInput.value.trim() : "";
+
         await db.collection('appointments').doc(docRef.id).update({
             status: newStatus,
-            processedAt: new Date().toISOString()
+            processedAt: new Date().toISOString(),
+            remarks: remarkText // Save the remark to the student's appointment record
         });
 
         let recoveredMins = 0;
@@ -1431,6 +1482,44 @@ function executeConfirmedAction() {
         updateActiveStatus(pendingAdminAction);
     }
     closeActionConfirmModal();
+}
+
+// --- DEDICATED ADMIN REMARKS MODAL LOGIC ---
+function openRemarkConfirmModal() {
+    const name = document.getElementById('activeStudentName').textContent;
+    if (!name || name === "Desk Available" || name === "--") {
+        return showToast("No active student to add a remark for.");
+    }
+
+    const remarkText = document.getElementById('adminRemarksInput').value.trim();
+    if (!remarkText) {
+        return showToast("Please type a remark before saving.");
+    }
+
+    document.getElementById('remarkConfirmModal').classList.remove('hidden');
+}
+
+function closeRemarkConfirmModal() {
+    document.getElementById('remarkConfirmModal').classList.add('hidden');
+}
+
+async function confirmAndSaveRemark() {
+    try {
+        if (!window.currentActiveTokenData || !window.currentActiveTokenData.id) {
+            return showToast("No active session found.");
+        }
+        const remarkText = document.getElementById('adminRemarksInput').value.trim();
+
+        await db.collection('appointments').doc(window.currentActiveTokenData.id).update({
+            remarks: remarkText
+        });
+
+        showToast("Remark successfully saved and sent to student!");
+        closeRemarkConfirmModal();
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to save remark.");
+    }
 }
 
 // ==================== MASTER ROSTER MANAGEMENT (ADMIN) ====================
@@ -2502,5 +2591,9 @@ window.submitEditStudent = submitEditStudent;
 window.openActionConfirmModal = openActionConfirmModal;
 window.closeActionConfirmModal = closeActionConfirmModal;
 window.executeConfirmedAction = executeConfirmedAction;
+
+window.openRemarkConfirmModal = openRemarkConfirmModal;
+window.closeRemarkConfirmModal = closeRemarkConfirmModal;
+window.confirmAndSaveRemark = confirmAndSaveRemark;
 
 document.addEventListener('DOMContentLoaded', initApp);

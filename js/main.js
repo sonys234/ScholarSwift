@@ -1121,13 +1121,19 @@ async function refreshActiveStudentDisplay() {
 
     const dossier = document.getElementById('activeDossier');
     const container = dossier.parentElement;
-    const checklistDiv = document.getElementById('docChecklist');
-    const startTimerBtn = document.getElementById('startTimerBtn');
-    const timerContainer = document.getElementById('timerContainer');
 
-    // Grab the new remark elements
+    // UI Elements to toggle based on Empty vs Active state
+    const timerContainer = document.getElementById('timerContainer');
+    const studentMetaCards = document.getElementById('studentMetaCards');
+    const adminChecklistBlock = document.getElementById('adminChecklistBlock');
+    const emptyQueueGraphic = document.getElementById('emptyQueueGraphic');
+    const actionButtonsBlock = document.getElementById('adminActionButtonsBlock');
+    const remarksBlock = document.getElementById('adminRemarksBlock');
+
     const remarksInput = document.getElementById('adminRemarksInput');
     const saveRemarkBtn = document.getElementById('saveRemarkBtn');
+    const startTimerBtn = document.getElementById('startTimerBtn');
+    const slotIndicator = document.getElementById('activeSlotIndicator');
 
     container.classList.remove('bg-emerald-50', 'bg-red-50', 'bg-slate-100', 'border-emerald-500', 'border-red-500', 'border-slate-400');
     if (timerContainer) timerContainer.classList.remove('ring-4', 'ring-red-500', 'bg-red-50');
@@ -1135,19 +1141,20 @@ async function refreshActiveStudentDisplay() {
     const oldFlag = document.getElementById('resultFlag');
     if (oldFlag) oldFlag.remove();
 
-    const actionButtons = document.querySelectorAll(`
-        button[onclick*="openActionConfirmModal('verified')"], 
-        button[onclick*="openActionConfirmModal('pending')"], 
-        button[onclick*="openActionConfirmModal('no_show')"]
-    `);
-    actionButtons.forEach(btn => btn.classList.remove('hidden'));
-
     if (!snap.empty) {
+        // --- DESK IS OCCUPIED ---
         const docRef = snap.docs[0];
         const data = docRef.data();
         const status = data.status;
 
-        // Pre-fill the remarks box
+        // Unhide all the active UI blocks
+        if (timerContainer) timerContainer.classList.remove('hidden');
+        if (studentMetaCards) studentMetaCards.classList.remove('hidden');
+        if (adminChecklistBlock) adminChecklistBlock.classList.remove('hidden');
+        if (actionButtonsBlock) actionButtonsBlock.classList.remove('hidden');
+        if (remarksBlock) remarksBlock.classList.remove('hidden');
+        if (emptyQueueGraphic) emptyQueueGraphic.classList.add('hidden'); // Hide the empty graphic
+
         if (remarksInput) {
             remarksInput.value = data.remarks || '';
         }
@@ -1158,8 +1165,8 @@ async function refreshActiveStudentDisplay() {
         document.getElementById('activeSchType').textContent = data.scholarshipType;
         document.getElementById('adminCurrentToken').textContent = `TOKEN: ${data.token}`;
 
-        if (document.getElementById('activeSlotIndicator')) {
-            document.getElementById('activeSlotIndicator').textContent = `Slot: ${data.time}`;
+        if (slotIndicator) {
+            slotIndicator.textContent = `Slot: ${data.time}`;
         }
 
         if (['verified', 'pending', 'no_show'].includes(status)) {
@@ -1184,12 +1191,12 @@ async function refreshActiveStudentDisplay() {
             }
 
             container.appendChild(flag);
-            actionButtons.forEach(btn => btn.classList.add('hidden'));
 
+            if (actionButtonsBlock) actionButtonsBlock.classList.add('hidden'); // Hide action buttons
             if (startTimerBtn) startTimerBtn.classList.add('hidden');
             if (sessionCountdown) clearInterval(sessionCountdown);
 
-            // NEW: Lock the remarks field since the status is finalized
+            // Lock remarks
             if (remarksInput) {
                 remarksInput.readOnly = true;
                 remarksInput.classList.add('bg-slate-100', 'text-slate-500', 'cursor-not-allowed');
@@ -1199,7 +1206,7 @@ async function refreshActiveStudentDisplay() {
             if (saveRemarkBtn) saveRemarkBtn.classList.add('hidden');
 
         } else {
-            // STUDENT IS CURRENTLY AT THE DESK
+            // STUDENT IS CURRENTLY ACTIVE
             if (!isTimerRunning && status === 'current') {
                 isTimerRunning = true;
                 startSessionTimer(420);
@@ -1209,7 +1216,6 @@ async function refreshActiveStudentDisplay() {
             }
             if (startTimerBtn) startTimerBtn.classList.add('hidden');
 
-            // NEW: Unlock the remarks field since the student is currently active
             if (remarksInput) {
                 remarksInput.readOnly = false;
                 remarksInput.classList.remove('bg-slate-100', 'text-slate-500', 'cursor-not-allowed');
@@ -1220,29 +1226,35 @@ async function refreshActiveStudentDisplay() {
 
         const studentData = { scholarshipType: data.scholarshipType };
         const appointmentData = { id: docRef.id, documentVerification: data.documentVerification || {} };
-        renderDocumentChecklist(studentData, appointmentData);
+        // We only render the checklist if the block is actually visible
+        if (typeof renderDocumentChecklist === 'function') {
+            renderDocumentChecklist(studentData, appointmentData);
+        }
 
     } else {
-        // QUEUE IS EMPTY
+        // --- QUEUE IS EMPTY ---
         isTimerRunning = false;
-        document.getElementById('activeStudentName').textContent = "Desk Available";
-        document.getElementById('docProgress').textContent = "0/0 Verified";
 
-        // Lock and clear box when desk is empty
+        // INSTANTLY HIDE ALL UNNECESSARY CLUTTER
+        if (timerContainer) timerContainer.classList.add('hidden');
+        if (studentMetaCards) studentMetaCards.classList.add('hidden');
+        if (adminChecklistBlock) adminChecklistBlock.classList.add('hidden');
+        if (actionButtonsBlock) actionButtonsBlock.classList.add('hidden');
+        if (remarksBlock) remarksBlock.classList.add('hidden');
+
+        // Show the beautiful "Empty" graphic
+        if (emptyQueueGraphic) emptyQueueGraphic.classList.remove('hidden');
+
+        document.getElementById('activeStudentName').textContent = "Desk Available";
+        document.getElementById('adminCurrentToken').textContent = "TOKEN: --";
+
         if (remarksInput) {
             remarksInput.value = '';
             remarksInput.readOnly = true;
-            remarksInput.classList.add('bg-slate-100', 'text-slate-500', 'cursor-not-allowed');
-            remarksInput.classList.remove('bg-white');
         }
-        if (saveRemarkBtn) saveRemarkBtn.classList.add('hidden');
 
         if (startTimerBtn) startTimerBtn.classList.add('hidden');
-        checklistDiv.innerHTML = `<div class="flex flex-col items-center justify-center py-12 text-center text-slate-300 animate-pulse"><svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><h4 class="font-bold">Queue is Empty</h4></div>`;
-        document.getElementById('adminCurrentToken').textContent = "TOKEN: --";
-        document.getElementById('activeStudentGR').textContent = "--";
-        document.getElementById('activeMahaDBT').textContent = "--";
-        document.getElementById('activeSchType').textContent = "--";
+        if (sessionCountdown) clearInterval(sessionCountdown);
     }
 }
 async function manualStartTimer() {

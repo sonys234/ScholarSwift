@@ -13,7 +13,6 @@ let sessionCountdown = null;
 let remainingSeconds = 420;
 let globalDelayMinutes = 0;
 
-let allAppointmentsData = [];
 window.rawMasterData = [];
 window.rawUsersData = [];
 window.rawAppsData = [];
@@ -97,6 +96,7 @@ const deptToDay = {
 // ==================== HELPER FUNCTIONS ====================
 function showToast(m) {
     const t = document.getElementById('toast');
+    if (!t) return;
     document.getElementById('toastMessage').textContent = m;
     t.classList.remove('translate-y-20', 'opacity-0');
     setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 3000);
@@ -186,104 +186,108 @@ function initApp() {
 
 function startLiveClock() {
     const updateTime = () => {
-        const now = new Date();
+        try {
+            const now = new Date();
+            const clockEl = document.getElementById('liveClock');
+            if (clockEl) {
+                const options = { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+                clockEl.textContent = now.toLocaleString('en-US', options).replace(/,/g, ' |');
+            }
 
-        const clockEl = document.getElementById('liveClock');
-        if (clockEl) {
-            const options = { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
-            clockEl.textContent = now.toLocaleString('en-US', options).replace(/,/g, ' |');
-        }
+            let masterDelay = getMasterDelay();
 
-        let masterDelay = getMasterDelay();
+            if (currentUserType === 'student' && window.currentStudentActiveApp) {
+                const activeApp = window.currentStudentActiveApp;
+                checkScheduledNotifications(activeApp, masterDelay);
 
-        if (currentUserType === 'student' && window.currentStudentActiveApp) {
-            const activeApp = window.currentStudentActiveApp;
-            checkScheduledNotifications(activeApp, masterDelay);
+                const waitEl = document.getElementById('waitTime');
+                const waitLabel = document.getElementById('waitLabel');
+                const slotEl = document.getElementById('yourSlotTime');
 
-            const waitEl = document.getElementById('waitTime');
-            const waitLabel = document.getElementById('waitLabel');
-            const slotEl = document.getElementById('yourSlotTime');
+                if (waitEl && waitLabel && slotEl && activeApp.time) {
+                    const originalStart = activeApp.time ? String(activeApp.time).toLowerCase() : "--:--";
+                    const originalEnd = originalStart !== "--:--" ? safeAddMinutes(originalStart, 7) : "--:--";
 
-            if (waitEl && waitLabel && slotEl && activeApp.time) {
-                const originalStart = activeApp.time ? String(activeApp.time).toLowerCase() : "--:--";
-                const originalEnd = originalStart !== "--:--" ? safeAddMinutes(originalStart, 7) : "--:--";
+                    if (activeApp.status === 'current' && activeApp.isProcessing) {
+                        waitEl.textContent = "In Progress";
+                        waitLabel.textContent = "Queue Status";
+                        waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-blue-600";
+                    } else if (isQueuePaused) {
+                        waitEl.textContent = "Paused";
+                        waitLabel.textContent = "Queue Status";
+                        waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-amber-500";
+                    } else if (masterDelay > 0) {
+                        waitEl.textContent = `+${masterDelay} mins`;
+                        waitLabel.textContent = "Running Late";
+                        waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-red-500";
+                    } else {
+                        waitEl.textContent = "On Time";
+                        waitLabel.textContent = "Queue Status";
+                        waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-emerald-500";
+                    }
 
-                if (activeApp.status === 'current' && activeApp.isProcessing) {
-                    waitEl.textContent = "In Progress";
-                    waitLabel.textContent = "Queue Status";
-                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-blue-600";
-                } else if (isQueuePaused) {
-                    waitEl.textContent = "Paused";
-                    waitLabel.textContent = "Queue Status";
-                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-amber-500";
-                } else if (masterDelay > 0) {
-                    waitEl.textContent = `+${masterDelay} mins`;
-                    waitLabel.textContent = "Running Late";
-                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-red-500";
-                } else {
-                    waitEl.textContent = "On Time";
-                    waitLabel.textContent = "Queue Status";
-                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-emerald-500";
-                }
+                    if (masterDelay > 0 && originalStart !== "--:--") {
+                        const delayedEnd = safeAddMinutes(originalEnd, masterDelay);
+                        let delayedStart = safeAddMinutes(originalStart, masterDelay);
+                        if (activeApp.status === 'current') delayedStart = originalStart;
 
-                if (masterDelay > 0 && originalStart !== "--:--") {
-                    const delayedEnd = safeAddMinutes(originalEnd, masterDelay);
-                    let delayedStart = safeAddMinutes(originalStart, masterDelay);
-                    if (activeApp.status === 'current') delayedStart = originalStart;
-
-                    slotEl.innerHTML = `
-                        <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
-                            SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span class="block text-[10px] uppercase font-bold text-red-400">Expected</span>
-                                <span class="text-xl font-bold text-red-500 tracking-tight leading-none block mt-1">${delayedStart} - ${delayedEnd}</span>
+                        slotEl.innerHTML = `
+                            <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
+                                SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
                             </div>
-                            <div class="bg-red-50 border border-red-100 rounded-lg px-2 py-1 text-center shadow-sm">
-                                <span class="block text-[8px] uppercase font-black tracking-widest text-red-400 leading-none mb-0.5">Delayed</span>
-                                <span class="text-sm font-black text-red-600">+${masterDelay}m</span>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="block text-[10px] uppercase font-bold text-red-400">Expected</span>
+                                    <span class="text-xl font-bold text-red-500 tracking-tight leading-none block mt-1">${delayedStart} - ${delayedEnd}</span>
+                                </div>
+                                <div class="bg-red-50 border border-red-100 rounded-lg px-2 py-1 text-center shadow-sm">
+                                    <span class="block text-[8px] uppercase font-black tracking-widest text-red-400 leading-none mb-0.5">Delayed</span>
+                                    <span class="text-sm font-black text-red-600">+${masterDelay}m</span>
+                                </div>
                             </div>
-                        </div>
-                    `;
-                } else {
-                    slotEl.innerHTML = `
-                        <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
-                            SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span class="block text-[10px] uppercase font-bold text-emerald-500">Expected</span>
-                                <span class="text-xl font-bold text-emerald-600 tracking-tight leading-none block mt-1">${originalStart} - ${originalEnd}</span>
+                        `;
+                    } else {
+                        slotEl.innerHTML = `
+                            <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
+                                SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
                             </div>
-                            <div class="bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 text-center shadow-sm">
-                                <span class="block text-[8px] uppercase font-black tracking-widest text-emerald-500 leading-none mb-0.5">Status</span>
-                                <span class="text-sm font-black text-emerald-600">On Time</span>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="block text-[10px] uppercase font-bold text-emerald-500">Expected</span>
+                                    <span class="text-xl font-bold text-emerald-600 tracking-tight leading-none block mt-1">${originalStart} - ${originalEnd}</span>
+                                </div>
+                                <div class="bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 text-center shadow-sm">
+                                    <span class="block text-[8px] uppercase font-black tracking-widest text-emerald-500 leading-none mb-0.5">Status</span>
+                                    <span class="text-sm font-black text-emerald-600">On Time</span>
+                                </div>
                             </div>
-                        </div>
-                    `;
+                        `;
+                    }
                 }
             }
-        }
 
-        const tokenEl = document.getElementById('currentToken');
-        if (tokenEl && window.currentActiveTokenData) {
-            const data = window.currentActiveTokenData;
-            const headMins = parseTime(data.time);
-            if (headMins > 0) {
-                const scheduledDate = new Date();
-                scheduledDate.setHours(Math.floor(headMins / 60), (headMins % 60) + globalDelayMinutes, 0, 0);
+            const tokenEl = document.getElementById('currentToken');
+            if (tokenEl && window.currentActiveTokenData) {
+                const data = window.currentActiveTokenData;
+                const headMins = parseTime(data.time);
+                if (headMins > 0) {
+                    const scheduledDate = new Date();
+                    scheduledDate.setHours(Math.floor(headMins / 60), (headMins % 60) + globalDelayMinutes, 0, 0);
 
-                if (data.isProcessing || now >= scheduledDate) {
-                    tokenEl.textContent = data.token;
-                } else {
-                    tokenEl.textContent = "--";
+                    if (data.isProcessing || now >= scheduledDate) {
+                        tokenEl.textContent = data.token;
+                    } else {
+                        tokenEl.textContent = "--";
+                    }
                 }
+            } else if (tokenEl) {
+                tokenEl.textContent = "--";
             }
-        } else if (tokenEl) {
-            tokenEl.textContent = "--";
+        } catch (err) {
+            console.error("Clock update error:", err);
         }
     };
+
     updateTime();
     setInterval(updateTime, 1000);
 }
@@ -304,12 +308,9 @@ function listenToQueueSettings() {
     });
 
     db.collection('settings').doc('lifecycle').onSnapshot(doc => {
-        let data = {};
+        let data = { academicYear: "2025-2026", mahadbtWindowOpen: false };
         if (doc.exists) {
             data = doc.data();
-        } else {
-            data = { academicYear: "2025-2026", mahadbtWindowOpen: false };
-            db.collection('settings').doc('lifecycle').set(data);
         }
 
         window.systemAcademicYear = data.academicYear || "2025-2026";
@@ -336,7 +337,7 @@ function listenToQueueSettings() {
         if (updateModal && !updateModal.classList.contains('hidden') && typeof window.toggleEditProfile === 'function') {
             window.toggleEditProfile();
         }
-    });
+    }, err => console.error("Lifecycle Snapshot Error: ", err));
 
     db.collection('appointments').where('status', '==', 'current').limit(1).onSnapshot(snap => {
         if (!snap.empty) {
@@ -675,10 +676,12 @@ function showStudentDashboard() {
         const remarkTextEl = document.getElementById('studentRemarkText');
         const relevantApp = window.currentStudentActiveApp || (window.allStudentApps && window.allStudentApps[0]);
         const displayRemark = currentUser.adminRemark || (relevantApp ? relevantApp.remarks : '');
+        const displayDate = currentUser.adminRemarkTimestamp || '';
 
         if (displayRemark && displayRemark.trim() !== '') {
             if (remarksBlock) remarksBlock.classList.remove('hidden');
-            if (remarkTextEl) remarkTextEl.textContent = `"${displayRemark}"`;
+            let timeHtml = displayDate ? `<span class="block text-[10px] font-bold text-violet-400 mt-1.5">${displayDate}</span>` : '';
+            if (remarkTextEl) remarkTextEl.innerHTML = `"${displayRemark}" ${timeHtml}`;
         } else {
             if (remarksBlock) remarksBlock.classList.add('hidden');
         }
@@ -735,7 +738,6 @@ function showStudentDashboard() {
 
             window.currentStudentActiveApp = activeApp || null;
 
-            // --- STUDENT ANNOUNCEMENT LISTENER ---
             let myTrueStatus = "not_booked";
             if (isVerified) {
                 myTrueStatus = "verified";
@@ -757,6 +759,9 @@ function showStudentDashboard() {
 
                     announceSnap.forEach(doc => {
                         const ann = doc.data();
+
+                        if (ann.isRevoked) return;
+
                         const deptMatch = ann.targetDept === 'ALL' || ann.targetDept === currentUser.department;
                         const yearMatch = ann.targetYear === 'ALL' || ann.targetYear === String(currentUser.currentYear);
                         const statusMatch = ann.targetStatus === 'ALL' || ann.targetStatus === myTrueStatus;
@@ -1034,7 +1039,6 @@ function showAdminDashboard() {
     document.getElementById('todaysDept').textContent = `${currentUser.role} | ${currentUser.department}`;
 
     toggleAdminView('live');
-    loadStudentDirectory(); // Force load the pipeline!
 
     const todayDayNum = new Date().getDay();
     let todaysDepts = [];
@@ -1044,7 +1048,9 @@ function showAdminDashboard() {
 
     const deptBannerText = document.getElementById('adminTodayDeptText');
     if (deptBannerText) {
-        if (todaysDepts.length > 0) {
+        if (todayDayNum === 0) {
+            deptBannerText.textContent = `HOLIDAY (SUNDAY)`;
+        } else if (todaysDepts.length > 0) {
             deptBannerText.textContent = `TODAY: ${todaysDepts.join(', ')}`;
         } else {
             deptBannerText.textContent = `OPEN DAY (ALL)`;
@@ -1166,7 +1172,6 @@ function toggleAdminView(view) {
     const dirView = document.getElementById('adminDirectoryView');
     const announceView = document.getElementById('adminAnnouncementsView');
 
-    // Forcefully hide everything and strip conflicting classes
     [liveView, statsView, dirView, announceView].forEach(el => {
         if (el) {
             el.classList.add('hidden');
@@ -1179,19 +1184,19 @@ function toggleAdminView(view) {
         if (btn) btn.classList.remove('bg-emerald-600', 'text-white');
     });
 
-    if (view === 'live' && liveView) liveView.classList.remove('hidden');
-    else if (view === 'stats' && statsView) {
+    if (view === 'live' && liveView) {
+        liveView.classList.remove('hidden');
+    } else if (view === 'stats' && statsView) {
         statsView.classList.remove('hidden');
         const btn = document.getElementById('btnViewStats');
         if (btn) btn.classList.add('bg-emerald-600', 'text-white');
         if (window.unifiedCollegeData && window.unifiedCollegeData.length > 0) applyFilters();
-    }
-    else if (view === 'directory' && dirView) {
+    } else if (view === 'directory' && dirView) {
         dirView.classList.remove('hidden');
         const btn = document.getElementById('btnViewDirectory');
         if (btn) btn.classList.add('bg-emerald-600', 'text-white');
-    }
-    else if (view === 'announcements' && announceView) {
+        loadStudentDirectory();
+    } else if (view === 'announcements' && announceView) {
         announceView.classList.remove('hidden');
         const btn = document.getElementById('btnViewAnnouncements');
         if (btn) btn.classList.add('bg-emerald-600', 'text-white');
@@ -1720,7 +1725,7 @@ async function submitSingleStudent(e) {
 }
 
 async function enableAdminEditMode() {
-    if (!activeModalStudentUid) return;
+    if (!activeModalStudentUid) return showToast("Error: No student selected.");
 
     try {
         const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
@@ -1739,6 +1744,7 @@ async function enableAdminEditMode() {
         showToast("Error fetching student details.");
     }
 }
+window.enableAdminEditMode = enableAdminEditMode;
 
 function closeEditStudentModal() {
     document.getElementById('editStudentModal').classList.add('hidden');
@@ -1814,7 +1820,7 @@ function filterDirectory() {
     const tbody = document.getElementById('directoryTableBody');
     if (!tbody) return;
 
-    tbody.innerHTML = '';
+    let newHtml = '';
 
     const filtered = window.allStudentsData.filter(s => {
         const safeName = s.name || "";
@@ -1830,13 +1836,6 @@ function filterDirectory() {
     }
 
     filtered.forEach(s => {
-        const tr = document.createElement('tr');
-        tr.className = "hover:bg-slate-50 transition-colors cursor-pointer group";
-
-        tr.onclick = function () {
-            openStudentDetailsModal(s);
-        };
-
         const statusBadge = s.isRegistered
             ? `<span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-[10px] font-black uppercase tracking-wider">Registered</span>`
             : `<span class="px-2 py-1 bg-slate-200 text-slate-600 rounded text-[10px] font-black uppercase tracking-wider">Unregistered</span>`;
@@ -1844,29 +1843,185 @@ function filterDirectory() {
         const safeName = s.name || "Unknown Student";
         const initial = safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?";
 
-        tr.innerHTML = `
-            <td class="px-6 py-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center font-black shadow-sm group-hover:bg-violet-500 group-hover:text-white transition-colors">
-                        ${initial}
+        newHtml += `
+            <tr class="hover:bg-slate-50 transition-colors cursor-pointer group" onclick="window.openStudentProfile('${s.prn}')">
+                <td class="px-6 py-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center font-black shadow-sm group-hover:bg-violet-500 group-hover:text-white transition-colors">
+                            ${initial}
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-800">${safeName}</p>
+                        </div>
                     </div>
-                    <div>
-                        <p class="font-bold text-slate-800">${safeName}</p>
+                </td>
+                <td class="px-6 py-4">
+                    <p class="font-bold text-slate-700">${s.prn || '--'}</p>
+                    <div class="text-[10px] uppercase font-bold text-slate-400 mt-1 flex items-center gap-2">
+                        <span>${s.department || '--'}</span> • <span>${yearLabels[s.currentYear] || s.currentYear || '--'}</span>
                     </div>
-                </div>
-            </td>
-            <td class="px-6 py-4">
-                <p class="font-bold text-slate-700">${s.prn || '--'}</p>
-                <div class="text-[10px] uppercase font-bold text-slate-400 mt-1 flex items-center gap-2">
-                    <span>${s.department || '--'}</span> • <span>${yearLabels[s.currentYear] || s.currentYear || '--'}</span>
-                </div>
-            </td>
-            <td class="px-6 py-4 text-center">
-                ${statusBadge}
-            </td>
+                </td>
+                <td class="px-6 py-4 text-center">
+                    ${statusBadge}
+                </td>
+            </tr>
         `;
-        tbody.appendChild(tr);
     });
+
+    tbody.innerHTML = newHtml;
+}
+
+window.openStudentProfile = function (prn) {
+    const student = window.allStudentsData.find(s => s.prn === prn);
+    if (student) {
+        openStudentDetailsModal(student);
+    } else {
+        showToast("Error locating student data.");
+    }
+};
+
+async function openStudentDetailsModal(student) {
+    try {
+        console.log("Successfully passed data to modal function.");
+        activeModalStudentUid = student.prn;
+
+        const safeName = student.name || "Unknown Student";
+
+        const setEl = (id, text) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        };
+
+        setEl('modalInitials', safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?");
+        setEl('modalName', safeName);
+        setEl('modalEmail', student.contactNo ? `Ph: ${student.contactNo}` : "");
+        setEl('modalGR', student.prn || "--");
+        setEl('modalPhone', student.contactNo || "--");
+        setEl('modalDept', student.department || "--");
+        setEl('modalJoinYr', student.joiningYear || "--");
+        setEl('modalCurrYr', yearLabels[student.currentYear] || student.currentYear || "--");
+        setEl('modalSchType', student.scholarshipType || "--");
+        setEl('modalMahaDBT', student.mahadbtId || "Not Provided");
+
+        const tbody = document.getElementById('modalHistoryBody');
+        const statusEl = document.getElementById('modalCurrentStatus');
+        const pendingDocsEl = document.getElementById('modalPendingDocs');
+        const attemptsInfo = document.getElementById('modalAttemptsInfo');
+
+        const msgBlock = document.getElementById('adminDirectMessageBlock');
+        const fineBlock = document.getElementById('adminFineBlock');
+        const remarkInput = document.getElementById('dirAdminRemarkInput');
+
+        if (pendingDocsEl) {
+            pendingDocsEl.classList.add('hidden');
+            pendingDocsEl.innerHTML = '';
+        }
+
+        if (!student.isRegistered || !student.uid) {
+            if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">Student has not created an account yet.</td></tr>`;
+            if (statusEl) statusEl.innerHTML = `<span class="text-slate-500 font-bold">Unregistered</span>`;
+            if (attemptsInfo) attemptsInfo.innerHTML = `<span class="text-slate-400 text-lg">N/A</span>`;
+
+            if (msgBlock) msgBlock.classList.add('hidden');
+            if (fineBlock) fineBlock.classList.add('hidden');
+
+            document.getElementById('studentDetailsModal').classList.remove('hidden');
+            return;
+        }
+
+        if (msgBlock) msgBlock.classList.remove('hidden');
+        if (fineBlock) fineBlock.classList.remove('hidden');
+        if (remarkInput) remarkInput.value = student.adminRemark || "";
+
+        window.listenToStudentMessages(student.prn);
+
+        const snap = await db.collection('appointments').where('uid', '==', student.uid).get();
+        let apps = [];
+        snap.forEach(doc => apps.push(doc.data()));
+
+        apps.sort((a, b) => {
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            return parseTime(b.time) - parseTime(a.time);
+        });
+
+        if (tbody) {
+            tbody.innerHTML = '';
+            if (apps.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">No bookings found for this student.</td></tr>`;
+            } else {
+                apps.forEach(app => {
+                    let badgeStyle = "bg-slate-100 text-slate-600";
+                    let sLabel = app.status || 'waiting';
+                    const baseS = sLabel.replace('_closed', '');
+
+                    if (baseS === 'verified') badgeStyle = "bg-emerald-100 text-emerald-700";
+                    else if (baseS === 'pending') badgeStyle = "bg-amber-100 text-amber-700";
+                    else if (baseS === 'no_show') badgeStyle = "bg-red-100 text-red-700";
+                    else if (baseS === 'cancelled') badgeStyle = "bg-slate-100 text-slate-500 line-through";
+                    else if (baseS === 'current') badgeStyle = "bg-blue-100 text-blue-700";
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="px-4 py-3 font-medium text-slate-700">${app.date} <span class="text-xs text-slate-400 ml-1">${app.time}</span></td>
+                            <td class="px-4 py-3 font-mono text-slate-600 text-xs">${app.token}</td>
+                            <td class="px-4 py-3"><span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${badgeStyle}">${baseS}</span></td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        const usedAttempts = apps.length;
+        const extraAttempts = student.extraAttempts || 0;
+        const limit = 3 + extraAttempts;
+        const left = Math.max(0, limit - usedAttempts);
+
+        if (attemptsInfo) {
+            attemptsInfo.innerHTML = `
+                <span class="${left === 0 ? 'text-red-500' : 'text-emerald-600'}">${left} Left</span> 
+                <span class="text-sm text-slate-500 font-medium">/ ${limit} Allowed</span>
+                <span class="block text-[11px] font-bold text-slate-400 mt-1 uppercase tracking-wider">(${usedAttempts} Used, ${extraAttempts} Extra Granted)</span>
+            `;
+        }
+
+        const latestApp = apps[0];
+        if (!latestApp) {
+            if (statusEl) statusEl.innerHTML = `<span class="text-slate-500">Not Booked Yet</span>`;
+        } else {
+            const baseStatus = latestApp.status.replace('_closed', '');
+            if (baseStatus === 'verified') {
+                if (statusEl) statusEl.innerHTML = `<span class="text-emerald-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> Verified</span>`;
+            } else if (baseStatus === 'pending') {
+                if (statusEl) statusEl.innerHTML = `<span class="text-amber-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Pending Documents</span>`;
+
+                const req = scholarshipDocs[student.scholarshipType] || [];
+                const ver = latestApp.documentVerification || {};
+                const missing = req.filter(d => !ver[d]);
+
+                if (missing.length > 0 && pendingDocsEl) {
+                    pendingDocsEl.classList.remove('hidden');
+                    pendingDocsEl.innerHTML = `<span class="font-bold uppercase tracking-wider text-[10px] block mb-1">Missing Documents:</span> • ${missing.join('<br> • ')}`;
+                }
+            } else if (baseStatus === 'no_show') {
+                if (statusEl) statusEl.innerHTML = `<span class="text-red-600">No Show</span>`;
+            } else if (baseStatus === 'cancelled') {
+                if (statusEl) statusEl.innerHTML = `<span class="text-slate-500">Cancelled by Student</span>`;
+            } else {
+                if (statusEl) statusEl.innerHTML = `<span class="text-blue-600">Slot Booked / Waiting</span>`;
+            }
+        }
+
+        document.getElementById('studentDetailsModal').classList.remove('hidden');
+
+    } catch (e) {
+        console.error("Modal Crash: ", e);
+        showToast("Error opening profile. Please check console.");
+    }
+}
+
+function closeStudentDetailsModal() {
+    document.getElementById('studentDetailsModal').classList.add('hidden');
+    activeModalStudentUid = null;
 }
 
 function processUnifiedAnalytics() {
@@ -2300,19 +2455,19 @@ async function promptUpdateAcademicYear() {
         } catch (e) { showToast("Error updating year"); }
     }
 }
-
 window.toggleMahadbtWindow = toggleMahadbtWindow;
 window.promptUpdateAcademicYear = promptUpdateAcademicYear;
 
-async function grantExtraAttempts() {
-    if (!activeModalStudentUid) return;
+window.grantExtraAttempts = async function () {
+    if (!activeModalStudentUid) return showToast("Error: No student selected.");
 
     try {
         const masterRef = db.collection('master_students').doc(activeModalStudentUid);
         const doc = await masterRef.get();
-        if (!doc.exists) return;
+        if (!doc.exists) return showToast("Student not found in database.");
 
         const data = doc.data();
+
         if (data.uid) {
             await db.collection('users').doc(data.uid).update({
                 extraAttempts: firebase.firestore.FieldValue.increment(3)
@@ -2327,33 +2482,164 @@ async function grantExtraAttempts() {
         closeStudentDetailsModal();
         loadStudentDirectory();
     } catch (e) {
-        showToast("Error updating student record.");
+        console.error("Fine Unlock Error: ", e);
+        showToast("Error updating student record. Check console.");
     }
-}
+};
 
-async function saveDirectoryMessage() {
-    if (!activeModalStudentUid) return;
+window.saveDirectoryMessage = async function () {
+    if (!activeModalStudentUid) return showToast("Error: No student selected.");
 
-    const msg = document.getElementById('dirAdminRemarkInput').value.trim();
-    const btn = document.querySelector('button[onclick="saveDirectoryMessage()"]');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = "Saving...";
+    const inputEl = document.getElementById('dirAdminRemarkInput');
+    if (!inputEl) return showToast("Error finding input box.");
+
+    const msg = inputEl.value.trim();
+    if (!msg) return showToast("Please type a message first.");
+
+    let btn = null;
+    let origText = "Save & Send Message";
+    try {
+        btn = document.querySelector('button[onclick*="saveDirectoryMessage"]');
+        if (btn) { origText = btn.innerHTML; btn.innerHTML = "Saving..."; btn.disabled = true; }
+    } catch (e) { }
 
     try {
-        await db.collection('master_students').doc(activeModalStudentUid).update({ adminRemark: msg });
+        const timestampStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+
+        await db.collection('student_messages').add({
+            prn: activeModalStudentUid,
+            message: msg,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            timestampString: timestampStr,
+            isRevoked: false
+        });
+
+        await db.collection('master_students').doc(activeModalStudentUid).update({
+            adminRemark: msg,
+            adminRemarkTimestamp: timestampStr
+        });
+
         const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
         const data = doc.data();
         if (data.uid) {
-            await db.collection('users').doc(data.uid).update({ adminRemark: msg });
+            await db.collection('users').doc(data.uid).update({
+                adminRemark: msg,
+                adminRemarkTimestamp: timestampStr
+            });
         }
-        showToast(msg ? "Message Pinned to Student's Dashboard!" : "Message Cleared.");
+
+        inputEl.value = "";
+        showToast("Message Pinned & Logged!");
     } catch (e) {
+        console.error("Direct Message Error: ", e);
         showToast("Error saving message.");
     } finally {
-        btn.innerHTML = originalText;
+        if (btn) { btn.innerHTML = origText; btn.disabled = false; }
     }
-}
-window.saveDirectoryMessage = saveDirectoryMessage;
+};
+
+
+window.recallStudentMessage = async function (msgId, prn) {
+    if (!confirm("Recall this direct message?\n\nIt will fade from the log and disappear from the student's dashboard.")) return;
+
+    try {
+        // Soft Delete
+        await db.collection('student_messages').doc(msgId).update({ isRevoked: true });
+
+        // Fetch remaining active messages without triggering Firebase Index Errors
+        const snap = await db.collection('student_messages')
+            .where('prn', '==', prn)
+            .where('isRevoked', '==', false)
+            .get();
+
+        // Sort them newest-to-oldest directly in the browser!
+        let msgs = [];
+        snap.forEach(doc => msgs.push(doc.data()));
+        msgs.sort((a, b) => {
+            const tA = a.createdAt ? a.createdAt.toMillis() : 0;
+            const tB = b.createdAt ? b.createdAt.toMillis() : 0;
+            return tB - tA;
+        });
+
+        let newActiveRemark = "";
+        let newActiveTimestamp = "";
+        if (msgs.length > 0) {
+            newActiveRemark = msgs[0].message;
+            newActiveTimestamp = msgs[0].timestampString || "";
+        }
+
+        await db.collection('master_students').doc(prn).update({
+            adminRemark: newActiveRemark,
+            adminRemarkTimestamp: newActiveTimestamp
+        });
+        const doc = await db.collection('master_students').doc(prn).get();
+        const data = doc.data();
+        if (data.uid) {
+            await db.collection('users').doc(data.uid).update({
+                adminRemark: newActiveRemark,
+                adminRemarkTimestamp: newActiveTimestamp
+            });
+        }
+
+        showToast("Message Recalled Successfully!");
+    } catch (e) {
+        console.error("Error recalling:", e);
+        showToast("Error recalling message.");
+    }
+};
+
+window.listenToStudentMessages = function (prn) {
+    if (window.currentMsgListener) window.currentMsgListener();
+
+    // Removed .orderBy() to bypass the strict Firebase Index requirement!
+    window.currentMsgListener = db.collection('student_messages')
+        .where('prn', '==', prn)
+        .onSnapshot(snap => {
+            const tbody = document.getElementById('studentMessageLogBody');
+            if (!tbody) return;
+
+            if (snap.empty) {
+                tbody.innerHTML = `<tr><td class="p-3 text-center text-slate-400 italic">No messages yet.</td></tr>`;
+                return;
+            }
+
+            // Pull all messages into an array
+            let msgs = [];
+            snap.forEach(doc => msgs.push({ id: doc.id, ...doc.data() }));
+
+            // Sort them newest-to-oldest right here in the Javascript
+            msgs.sort((a, b) => {
+                const timeA = a.createdAt ? a.createdAt.toMillis() : Date.now();
+                const timeB = b.createdAt ? b.createdAt.toMillis() : Date.now();
+                return timeB - timeA;
+            });
+
+            let html = '';
+            msgs.forEach(data => {
+                const isRevoked = data.isRevoked;
+
+                const textClass = isRevoked ? "text-slate-400" : "text-violet-900 font-medium";
+                const rowClass = isRevoked ? "bg-slate-50 opacity-60" : "bg-white hover:bg-violet-50 transition-colors";
+
+                const btnHtml = isRevoked
+                    ? `<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest border border-slate-200 px-1.5 py-0.5 rounded bg-slate-100">Recalled</span>`
+                    : `<button onclick="window.recallStudentMessage('${data.id}', '${prn}')" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-100 p-1.5 rounded transition-colors" title="Recall Message">
+                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                       </button>`;
+
+                html += `
+                    <tr class="${rowClass} border-b border-violet-50 last:border-0">
+                        <td class="p-3 w-1/4 text-[10px] font-bold text-slate-500 whitespace-nowrap align-top border-r border-violet-50">${data.timestampString || 'Just now'}</td>
+                        <td class="p-3 w-2/4 ${textClass} break-words align-top text-sm">${data.message}</td>
+                        <td class="p-3 w-1/4 text-right align-top border-l border-violet-50">${btnHtml}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }, err => {
+            console.error("Log fetch error:", err);
+        });
+};
 
 
 // ==========================================
@@ -2373,7 +2659,8 @@ async function submitAnnouncement(e) {
             targetYear: document.getElementById('announceYear').value,
             targetStatus: document.getElementById('announceStatus').value,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            timestampString: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
+            timestampString: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }),
+            isRevoked: false
         };
         await db.collection('announcements').add(payload);
         showToast("Announcement Broadcasted Successfully!");
@@ -2387,14 +2674,36 @@ async function submitAnnouncement(e) {
 }
 window.submitAnnouncement = submitAnnouncement;
 
-async function deleteAnnouncement(id) {
-    if (!confirm("Delete this announcement permanently?")) return;
-    try {
-        await db.collection('announcements').doc(id).delete();
-        showToast("Announcement deleted.");
-    } catch (e) { showToast("Error deleting announcement."); }
+let pendingRecallId = null;
+
+function deleteAnnouncement(id) {
+    pendingRecallId = id;
+    const modal = document.getElementById('recallConfirmModal');
+    if (modal) modal.classList.remove('hidden');
 }
 window.deleteAnnouncement = deleteAnnouncement;
+
+function closeRecallModal() {
+    const modal = document.getElementById('recallConfirmModal');
+    if (modal) modal.classList.add('hidden');
+    pendingRecallId = null;
+}
+window.closeRecallModal = closeRecallModal;
+
+async function confirmRecallAnnouncement() {
+    if (!pendingRecallId) return;
+
+    try {
+        await db.collection('announcements').doc(pendingRecallId).update({
+            isRevoked: true
+        });
+        showToast("Announcement recalled from student dashboards.");
+        closeRecallModal();
+    } catch (e) {
+        showToast("Error recalling announcement.");
+    }
+}
+window.confirmRecallAnnouncement = confirmRecallAnnouncement;
 
 function initAdminAnnouncementListener() {
     if (window.adminAnnounceListener) return;
@@ -2410,27 +2719,134 @@ function initAdminAnnouncementListener() {
 
         snap.forEach(doc => {
             const data = doc.data();
+            const isRevoked = data.isRevoked === true;
+
             const tagClass = "inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest mr-1 mb-1 shadow-sm border";
             let filtersHTML = "";
             filtersHTML += `<span class="${tagClass} ${data.targetDept === 'ALL' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-100 text-blue-700 border-blue-200'}">DEPT: ${data.targetDept}</span>`;
             filtersHTML += `<span class="${tagClass} ${data.targetYear === 'ALL' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'}">YR: ${data.targetYear}</span>`;
             filtersHTML += `<span class="${tagClass} ${data.targetStatus === 'ALL' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-amber-100 text-amber-700 border-amber-200'}">STATUS: ${data.targetStatus}</span>`;
 
+            const rowClass = isRevoked ? "bg-slate-50 opacity-60" : "bg-white hover:bg-slate-50 transition-colors";
+            const textClass = isRevoked ? "text-slate-500" : "text-slate-800";
+
+            let actionBtn = isRevoked
+                ? `<span class="px-2 py-1 bg-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-widest rounded">Recalled</span>`
+                : `<button onclick="window.deleteAnnouncement('${doc.id}')" class="p-1.5 bg-red-50 text-red-500 hover:bg-red-100 rounded-md transition-colors" title="Recall Broadcast">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                   </button>`;
+
             tbody.innerHTML += `
-                <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-6 py-4 font-bold text-slate-600 text-xs whitespace-nowrap">${data.timestampString || 'Just now'}</td>
-                    <td class="px-6 py-4 text-slate-800 font-medium">${data.message}</td>
+                <tr class="${rowClass}">
+                    <td class="px-6 py-4 font-bold text-slate-500 text-xs whitespace-nowrap">${data.timestampString || 'Just now'}</td>
+                    <td class="px-6 py-4 ${textClass} font-medium">${data.message}</td>
                     <td class="px-6 py-4">${filtersHTML}</td>
-                    <td class="px-6 py-4">
-                        <button onclick="deleteAnnouncement('${doc.id}')" class="p-1.5 bg-red-50 text-red-500 hover:bg-red-100 rounded-md transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
-                    </td>
+                    <td class="px-6 py-4">${actionBtn}</td>
                 </tr>
             `;
         });
     });
 }
+
+// ==========================================
+// UNIFIED CUSTOM MODAL ENGINE (Overrides Ugly Browser Popups)
+// ==========================================
+
+// Create fresh global variables to avoid conflicts with older code
+window.sharedRecallId = null;
+window.sharedRecallType = null;
+window.sharedRecallPrn = null;
+
+// 1. Override the Direct Message Delete click
+window.recallStudentMessage = function (msgId, prn) {
+    window.sharedRecallId = msgId;
+    window.sharedRecallPrn = prn;
+    window.sharedRecallType = 'message'; // Tag it as a direct message
+    const modal = document.getElementById('recallConfirmModal');
+    if (modal) modal.classList.remove('hidden');
+};
+
+// 2. Override the Global Announcement Delete click
+window.deleteAnnouncement = function (id) {
+    window.sharedRecallId = id;
+    window.sharedRecallType = 'announcement'; // Tag it as a global broadcast
+    const modal = document.getElementById('recallConfirmModal');
+    if (modal) modal.classList.remove('hidden');
+};
+
+// 3. Override the "Cancel" button inside the modal
+window.closeRecallModal = function () {
+    const modal = document.getElementById('recallConfirmModal');
+    if (modal) modal.classList.add('hidden');
+    window.sharedRecallId = null;
+    window.sharedRecallType = null;
+    window.sharedRecallPrn = null;
+};
+
+// 4. Override the "Recall It" confirm button inside the modal to handle BOTH types dynamically!
+window.confirmRecallAnnouncement = async function () {
+    if (!window.sharedRecallId) return;
+
+    // Grab the button to show the loading animation
+    const btn = document.querySelector('#recallConfirmModal button.bg-red-500');
+    const origText = btn ? btn.textContent : "Recall It";
+    if (btn) btn.textContent = "Recalling...";
+
+    try {
+        if (window.sharedRecallType === 'announcement') {
+            // Handle Global Announcement Recall
+            await db.collection('announcements').doc(window.sharedRecallId).update({ isRevoked: true });
+            showToast("Announcement recalled from student dashboards.");
+        }
+        else if (window.sharedRecallType === 'message') {
+            // Handle Direct Student Message Recall
+            await db.collection('student_messages').doc(window.sharedRecallId).update({ isRevoked: true });
+
+            // Fetch the remaining active messages to rollback the student's dashboard
+            const snap = await db.collection('student_messages')
+                .where('prn', '==', window.sharedRecallPrn)
+                .where('isRevoked', '==', false)
+                .get();
+
+            let msgs = [];
+            snap.forEach(doc => msgs.push(doc.data()));
+            msgs.sort((a, b) => {
+                const tA = a.createdAt ? a.createdAt.toMillis() : 0;
+                const tB = b.createdAt ? b.createdAt.toMillis() : 0;
+                return tB - tA;
+            });
+
+            let newActiveRemark = "";
+            let newActiveTimestamp = "";
+            if (msgs.length > 0) {
+                newActiveRemark = msgs[0].message;
+                newActiveTimestamp = msgs[0].timestampString || "";
+            }
+
+            // Sync the rollback to the database
+            await db.collection('master_students').doc(window.sharedRecallPrn).update({
+                adminRemark: newActiveRemark,
+                adminRemarkTimestamp: newActiveTimestamp
+            });
+            const doc = await db.collection('master_students').doc(window.sharedRecallPrn).get();
+            if (doc.exists && doc.data().uid) {
+                await db.collection('users').doc(doc.data().uid).update({
+                    adminRemark: newActiveRemark,
+                    adminRemarkTimestamp: newActiveTimestamp
+                });
+            }
+            showToast("Message Recalled Successfully!");
+        }
+
+        window.closeRecallModal(); // Hide the modal when done
+
+    } catch (e) {
+        console.error("Error recalling:", e);
+        showToast("Error recalling item.");
+    } finally {
+        if (btn) btn.textContent = origText; // Reset the button text
+    }
+};
 
 // ==================== WINDOW EXPORTS ====================
 window.setUserType = setUserType;

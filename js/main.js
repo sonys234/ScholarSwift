@@ -2847,6 +2847,24 @@ window.confirmRecallAnnouncement = async function () {
         if (btn) btn.textContent = origText; // Reset the button text
     }
 };
+// Make sure the academic year update function is properly exposed
+window.promptUpdateAcademicYear = async function() {
+    const newYear = prompt("Enter new Academic Year (e.g., 2026-2027):", window.systemAcademicYear);
+    if (newYear && newYear.trim() !== "") {
+        try {
+            await db.collection('settings').doc('lifecycle').set({
+                academicYear: newYear.trim()
+            }, { merge: true });
+            showToast("Academic Year Updated to " + newYear);
+            // Refresh the display
+            const yearDisplay = document.getElementById('adminSystemYearDisplay');
+            if (yearDisplay) yearDisplay.textContent = newYear.trim();
+        } catch (e) { 
+            console.error("Error updating year:", e);
+            showToast("Error updating year"); 
+        }
+    }
+};
 
 // ==================== WINDOW EXPORTS ====================
 window.setUserType = setUserType;

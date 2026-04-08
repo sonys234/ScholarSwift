@@ -642,6 +642,7 @@ function showStudentDashboard() {
     if (!currentUser) return;
     document.getElementById('authPage').classList.add('hidden');
     document.getElementById('studentDashboard').classList.remove('hidden');
+    listenToStudentBroadcasts();
 
     const displayYear = currentUser.mahadbtYear || window.systemAcademicYear || "2025-2026";
 
@@ -1143,18 +1144,24 @@ function toggleAdminView(view) {
     const liveView = document.getElementById('adminLiveQueueView');
     const statsView = document.getElementById('adminStatsView');
     const dirView = document.getElementById('adminDirectoryView');
+    const annView = document.getElementById('adminAnnouncementsView'); // FIX: Added this reference
 
+    // Hide everything first
     if (liveView) liveView.classList.add('hidden');
     if (statsView) statsView.classList.add('hidden');
     if (dirView) dirView.classList.add('hidden');
+    if (annView) annView.classList.add('hidden');
 
+    // Show the requested view
     if (view === 'stats') {
         if (statsView) statsView.classList.remove('hidden');
         startLiveAnalytics();
     } else if (view === 'directory') {
-        // FIX: Actually unhide the directory and fetch the data!
         if (dirView) dirView.classList.remove('hidden');
         loadStudentDirectory();
+    } else if (view === 'announcements') {
+        if (annView) annView.classList.remove('hidden');
+        loadAdminAnnouncements(); // FIX: Trigger the announcement log to load!
     } else {
         if (liveView) liveView.classList.remove('hidden');
     }
@@ -2892,6 +2899,223 @@ async function promptUpdateAcademicYear() {
     }
 }
 
+// --- BROADCAST ANNOUNCEMENTS LOGIC ---
+
+// --- BROADCAST ANNOUNCEMENTS LOGIC ---
+
+async function submitAnnouncement(e) {
+    e.preventDefault();
+    const msg = document.getElementById('announceMsg').value.trim();
+    const dept = document.getElementById('announceDept').value;
+    const year = document.getElementById('announceYear').value;
+    const status = document.getElementById('announceStatus').value;
+
+    if (!msg) return showToast("Please type an announcement message.");
+
+    const btn = document.getElementById('btnSendBroadcast');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Publishing...";
+    btn.disabled = true;
+
+    try {
+        await db.collection('broadcasts').add({
+            message: msg,
+            targetDept: dept,
+            targetYear: year,
+            targetStatus: status,
+            timestamp: new Date().toISOString(),
+            author: currentUser.name,
+            status: 'active' // FIX: Track the active state so we can recall it later
+        });
+
+        showToast("Broadcast Published Successfully!");
+        document.getElementById('announcementForm').reset();
+    } catch (error) {
+        console.error(error);
+        showToast("Error sending broadcast.");
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+let broadcastListener = null;
+
+
+function loadAdminAnnouncements() {
+    if (broadcastListener) broadcastListener();
+
+    broadcastListener = db.collection('broadcasts').orderBy('timestamp', 'desc').limit(50)
+        .onSnapshot(snap => {
+            const tbody = document.getElementById('adminAnnouncementsLog');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+            if (snap.empty) {
+                tbody.innerHTML = `<tr><td colspan="4" class="px-6 py-8 text-center text-slate-400 italic">No previous broadcasts found.</td></tr>`;
+                return;
+            }
+
+            snap.forEach(doc => {
+                const data = doc.data();
+                const d = new Date(data.timestamp);
+                const timeStr = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                const deptLabel = data.targetDept === 'ALL' ? 'All Depts' : data.targetDept;
+                const yearLabel = data.targetYear === 'ALL' ? 'All Years' : `Year ${data.targetYear}`;
+
+                let statusLabel = 'All Statuses';
+                if (data.targetStatus === 'unregistered') statusLabel = 'Not Signed Up';
+                else if (data.targetStatus === 'not_booked') statusLabel = 'Signed Up (No Slot)';
+                else if (data.targetStatus === 'waiting') statusLabel = 'Slot Booked';
+                else if (data.targetStatus === 'verified') statusLabel = 'Verified';
+                else if (data.targetStatus === 'pending') statusLabel = 'Docs Pending';
+                else if (data.targetStatus === 'no_show') statusLabel = 'No Show';
+
+                let filtersHtml = `
+                    <span class="bg-violet-50 text-violet-700 px-2 py-0.5 rounded text-[9px] font-bold border border-violet-100 shadow-sm whitespace-nowrap">${deptLabel}</span>
+                    <span class="bg-violet-50 text-violet-700 px-2 py-0.5 rounded text-[9px] font-bold border border-violet-100 shadow-sm whitespace-nowrap">${yearLabel}</span>
+                    <span class="bg-violet-50 text-violet-700 px-2 py-0.5 rounded text-[9px] font-bold border border-violet-100 shadow-sm whitespace-nowrap">${statusLabel}</span>
+                `;
+
+                // FIX: Removed 'line-through' and added 'italic' with 'opacity-75' for clean readability
+                const isRecalled = data.status === 'recalled';
+                const textClass = isRecalled ? 'text-slate-400 italic opacity-75' : 'text-slate-800 font-medium';
+
+                let actionHtml = '';
+                if (isRecalled) {
+                    actionHtml = `<span class="text-[10px] text-slate-400 font-bold uppercase italic">Recalled</span>`;
+                } else {
+                    actionHtml = `<button onclick="promptRecallBroadcast('${doc.id}')" class="text-xs text-red-500 font-bold hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors border border-transparent hover:border-red-100">Recall</button>`;
+                }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4 text-xs text-slate-500 whitespace-nowrap align-top">${timeStr}</td>
+                        <td class="px-6 py-4 text-sm ${textClass}">${data.message}</td>
+                        <td class="px-6 py-4 align-top"><div class="flex flex-wrap gap-1.5">${filtersHtml}</div></td>
+                        <td class="px-6 py-4 text-right align-top">${actionHtml}</td>
+                    </tr>
+                `;
+            });
+        });
+}
+// ... Keep promptRecallBroadcast and closeBroadcastRecallModal exactly as they are ...
+
+async function executeBroadcastRecall() {
+    if (!pendingBroadcastRecallId) return;
+
+    const btn = document.getElementById('confirmBroadcastRecallBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Recalling...";
+    btn.disabled = true;
+
+    try {
+        // FIX: Update status to 'recalled' instead of deleting the document
+        await db.collection('broadcasts').doc(pendingBroadcastRecallId).update({
+            status: 'recalled'
+        });
+        showToast("Broadcast Recalled Successfully");
+        closeBroadcastRecallModal();
+    } catch (e) {
+        showToast("Error recalling broadcast");
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+// --- STUDENT LISTENER LOGIC ---
+let studentBroadcastListener = null;
+
+function listenToStudentBroadcasts() {
+    if (!currentUser || currentUserType !== 'student') return;
+
+    if (studentBroadcastListener) studentBroadcastListener();
+
+    studentBroadcastListener = db.collection('broadcasts').orderBy('timestamp', 'desc').limit(10)
+        .onSnapshot(snap => {
+            const container = document.getElementById('studentGlobalAnnouncements');
+            if (!container) return;
+            container.innerHTML = '';
+
+            let hasShown = false;
+
+            let myStatus = 'not_booked';
+            if (window.currentStudentActiveApp) {
+                myStatus = window.currentStudentActiveApp.status.replace('_closed', '');
+            } else if (window.allStudentApps && window.allStudentApps.length > 0) {
+                myStatus = window.allStudentApps[0].status.replace('_closed', '');
+            } else if (!currentUser.mahadbtId) {
+                myStatus = 'unregistered';
+            }
+
+            snap.forEach(doc => {
+                const data = doc.data();
+
+                // FIX: Skip rendering if the broadcast was recalled by the admin!
+                if (data.status === 'recalled') return;
+
+                const matchDept = data.targetDept === 'ALL' || data.targetDept === currentUser.department;
+                const matchYear = data.targetYear === 'ALL' || String(data.targetYear) === String(currentUser.currentYear);
+                const matchStatus = data.targetStatus === 'ALL' || data.targetStatus === myStatus;
+
+                if (matchDept && matchYear && matchStatus) {
+                    hasShown = true;
+
+                    const d = new Date(data.timestamp);
+                    const timeStr = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                    container.innerHTML += `
+                        <div class="bg-violet-600 rounded-2xl p-5 mb-4 shadow-xl text-white flex items-start gap-4 animate-pop border border-violet-500 relative overflow-hidden">
+                            <div class="absolute -right-10 -top-10 w-32 h-32 bg-violet-500 rounded-full opacity-50 blur-2xl pointer-events-none"></div>
+                            <div class="bg-white/20 p-2.5 rounded-xl shrink-0 backdrop-blur-sm shadow-sm relative z-10">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path></svg>
+                            </div>
+                            <div class="relative z-10 flex-1">
+                                <h4 class="font-bold text-xs text-violet-200 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-red-400 animate-pulse shadow-[0_0_8px_rgba(248,113,113,0.8)]"></span>
+                                    Official Broadcast from Admin
+                                </h4>
+                                <p class="font-medium text-[15px] leading-relaxed text-white">${data.message}</p>
+                                <p class="text-[10px] text-violet-300 mt-2 font-bold tracking-widest uppercase opacity-80">Broadcasted: ${timeStr}</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            if (hasShown) {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        });
+}
+
+
+
+
+
+// --- NEW BROADCAST RECALL MODAL LOGIC ---
+let pendingBroadcastRecallId = null;
+
+function promptRecallBroadcast(id) {
+    pendingBroadcastRecallId = id;
+    const modal = document.getElementById('broadcastRecallModal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeBroadcastRecallModal() {
+    pendingBroadcastRecallId = null;
+    const modal = document.getElementById('broadcastRecallModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+
+
+
+
 window.toggleMahadbtWindow = toggleMahadbtWindow;
 window.promptUpdateAcademicYear = promptUpdateAcademicYear;
 
@@ -2989,5 +3213,10 @@ window.toggleCustomDate = toggleCustomDate;
 window.openRemarkConfirmModal = openRemarkConfirmModal;
 window.closeRemarkConfirmModal = closeRemarkConfirmModal;
 window.confirmAndSaveRemark = confirmAndSaveRemark;
+window.promptRecallBroadcast = promptRecallBroadcast;
+window.closeBroadcastRecallModal = closeBroadcastRecallModal;
+window.executeBroadcastRecall = executeBroadcastRecall;
+window.submitAnnouncement = submitAnnouncement;
+window.deleteAnnouncement = deleteAnnouncement;
 
 document.addEventListener('DOMContentLoaded', initApp);

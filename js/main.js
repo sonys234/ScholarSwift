@@ -663,17 +663,45 @@ function showStudentDashboard() {
         const remarksBlock = document.getElementById('studentRemarksBlock');
         const remarkTextEl = document.getElementById('studentRemarkText');
 
-        const relevantApp = window.currentStudentActiveApp || (window.allStudentApps && window.allStudentApps[0]);
-        const displayRemark = currentUser.adminRemark || (relevantApp ? relevantApp.remarks : '');
+        let displayRemark = '';
+        let displayDate = '';
 
+        // 1. Check for the latest Active Direct Message
+        if (currentUser.directMessages && currentUser.directMessages.length > 0) {
+            const activeMsgs = currentUser.directMessages.filter(m => m.status === 'active');
+            if (activeMsgs.length > 0) {
+                const latestMsg = activeMsgs[activeMsgs.length - 1];
+                displayRemark = latestMsg.text;
+
+                // Format the timestamp cleanly
+                const d = new Date(latestMsg.timestamp);
+                displayDate = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            }
+        }
+
+        // 2. Fallback to Verification Appointment Remarks if no direct message exists
+        const relevantApp = window.currentStudentActiveApp || (window.allStudentApps && window.allStudentApps[0]);
+        if (!displayRemark && relevantApp && relevantApp.remarks && relevantApp.remarks.trim() !== '') {
+            displayRemark = relevantApp.remarks;
+
+            // Format the appointment processing time
+            let dObj = relevantApp.processedAt ? new Date(relevantApp.processedAt) : new Date();
+            displayDate = dObj.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        // 3. Render to the UI with the injected Timestamp
         if (displayRemark && displayRemark.trim() !== '') {
             if (remarksBlock) remarksBlock.classList.remove('hidden');
-            if (remarkTextEl) remarkTextEl.textContent = `"${displayRemark}"`;
+            if (remarkTextEl) {
+                remarkTextEl.innerHTML = `
+                    "${displayRemark}"
+                    <span class="block text-[11px] font-bold text-violet-400 mt-2 tracking-wide uppercase">Received: ${displayDate}</span>
+                `;
+            }
         } else {
             if (remarksBlock) remarksBlock.classList.add('hidden');
         }
     }
-
     // NEW: Real-time listener for the User Profile (Catches live Admin Remarks & Extra Attempts instantly)
     if (!window.userProfileListener) {
         window.userProfileListener = db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
@@ -1776,13 +1804,12 @@ function filterDirectory() {
         // Bulletproof safety checks encompassing ALL merged data fields
         const safeName = s.name || "";
         const safePRN = s.prn || s.grNumber || "";
-        const safeEmail = s.email || "";
         const safeDept = s.department || "";
         const safePhone = s.contactNo || "";
         const safeMahaDBT = s.mahadbtId || "";
 
-        // Combine all searchable strings
-        const str = `${safeName} ${safePRN} ${safeEmail} ${safeDept} ${safePhone} ${safeMahaDBT}`.toLowerCase();
+        // Combine all searchable strings (Email removed)
+        const str = `${safeName} ${safePRN} ${safeDept} ${safePhone} ${safeMahaDBT}`.toLowerCase();
         return str.includes(query);
     });
 
@@ -1806,8 +1833,9 @@ function filterDirectory() {
         // Safely pull merged data
         const displayPRN = s.prn || s.grNumber || "No PRN";
         const displayMahaDBT = s.mahadbtId ? `MahaDBT: ${s.mahadbtId}` : "MahaDBT: Not Provided";
-        const displayEmail = s.email || "No Email";
-        const displayPhone = s.contactNo ? ` • ${s.contactNo}` : "";
+
+        // FIX: Display Phone neatly, completely omitting email
+        const displayPhone = s.contactNo ? `<p class="text-[10px] text-slate-400 font-mono mt-0.5">📞 ${s.contactNo}</p>` : ``;
 
         tr.innerHTML = `
             <td class="px-6 py-4">
@@ -1818,7 +1846,7 @@ function filterDirectory() {
                     <div>
                         <p class="font-bold text-slate-800">${safeName}</p>
                         <p class="text-[11px] font-bold text-violet-600 font-mono mt-0.5">${displayPRN}</p>
-                        <p class="text-[10px] text-slate-400 font-mono mt-0.5">${displayEmail}${displayPhone}</p>
+                        ${displayPhone}
                     </div>
                 </div>
             </td>
@@ -1837,7 +1865,6 @@ function filterDirectory() {
 }
 
 async function openStudentDetailsModal(student) {
-    // FIX: Properly grab the ID from the merged data object (fixes the broken message feature)
     activeModalStudentUid = student.prn || student.grNumber || student.id;
 
     // Safety check for corrupt missing names
@@ -1845,11 +1872,11 @@ async function openStudentDetailsModal(student) {
     document.getElementById('modalInitials').textContent = safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?";
     document.getElementById('modalName').textContent = safeName;
 
-    document.getElementById('modalEmail').textContent = student.email || "No Email";
+    // FIX: Completely hide the email element from the UI
+    const emailEl = document.getElementById('modalEmail');
+    if (emailEl) emailEl.classList.add('hidden');
 
-    // FIX: Display the PRN properly here (fixes the blank space in the UI)
     document.getElementById('modalGR').textContent = activeModalStudentUid || "--";
-
     document.getElementById('modalPhone').textContent = student.contactNo || "--";
     document.getElementById('modalDept').textContent = student.department;
     document.getElementById('modalJoinYr').textContent = student.joiningYear;
@@ -1862,10 +1889,8 @@ async function openStudentDetailsModal(student) {
     const pendingDocsEl = document.getElementById('modalPendingDocs');
     const attemptsInfo = document.getElementById('modalAttemptsInfo');
 
-    // UI Elements to toggle based on Registration status
     const msgBlock = document.getElementById('adminDirectMessageBlock');
     const fineBlock = document.getElementById('adminFineBlock');
-    const remarkInput = document.getElementById('dirAdminRemarkInput');
 
     pendingDocsEl.classList.add('hidden');
     pendingDocsEl.innerHTML = '';
@@ -1876,7 +1901,6 @@ async function openStudentDetailsModal(student) {
         statusEl.innerHTML = `<span class="text-slate-500 font-bold">Unregistered</span>`;
         attemptsInfo.innerHTML = `<span class="text-slate-400 text-lg">N/A</span>`;
 
-        // Hide the action blocks because the student doesn't exist in the system yet
         if (msgBlock) msgBlock.classList.add('hidden');
         if (fineBlock) fineBlock.classList.add('hidden');
 
@@ -1885,50 +1909,20 @@ async function openStudentDetailsModal(student) {
     }
 
     // --- REGISTERED STUDENT STATE ---
-    // Reveal the action blocks
-    if (msgBlock) {
-        msgBlock.classList.remove('hidden');
-
-        // FIX: Setup Recall Button Logic dynamically
-        let recallBtn = document.getElementById('recallDirMsgBtn');
-        if (student.adminRemark && student.adminRemark.trim() !== '') {
-            if (!recallBtn) {
-                recallBtn = document.createElement('button');
-                recallBtn.id = 'recallDirMsgBtn';
-                recallBtn.className = "w-full py-2 mt-3 bg-red-100 hover:bg-red-200 text-red-600 text-xs font-bold rounded-lg shadow-sm transition-all border border-red-200";
-                recallBtn.innerHTML = `
-                    <div class="flex items-center justify-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                        Recall / Delete Message
-                    </div>`;
-                recallBtn.onclick = () => {
-                    document.getElementById('dirAdminRemarkInput').value = '';
-                    saveDirectoryMessage(); // Saving an empty string clears the message
-                };
-                msgBlock.appendChild(recallBtn);
-            } else {
-                recallBtn.classList.remove('hidden');
-            }
-        } else {
-            if (recallBtn) recallBtn.classList.add('hidden');
-        }
-    }
-
+    if (msgBlock) msgBlock.classList.remove('hidden');
     if (fineBlock) fineBlock.classList.remove('hidden');
-
-    // Load existing remark into the text box
-    if (remarkInput) remarkInput.value = student.adminRemark || "";
 
     try {
         const snap = await db.collection('appointments').where('uid', '==', student.uid).get();
         let apps = [];
-        snap.forEach(doc => apps.push(doc.data()));
+        snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() })); // Ensure ID is passed
 
         apps.sort((a, b) => {
             if (a.date !== b.date) return b.date.localeCompare(a.date);
             return parseTime(b.time) - parseTime(a.time);
         });
 
+        // 1. Populate Booking History Table
         tbody.innerHTML = '';
         if (apps.length === 0) {
             tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">No bookings found for this student.</td></tr>`;
@@ -1952,6 +1946,73 @@ async function openStudentDetailsModal(student) {
                     </tr>
                 `;
             });
+        }
+
+        // 2. NEW: Populate Communication Log Table
+        const logBody = document.getElementById('messageLogBody');
+        if (logBody) {
+            let logEntries = [];
+
+            // Grab Direct Messages from user profile
+            if (student.directMessages && Array.isArray(student.directMessages)) {
+                student.directMessages.forEach(m => {
+                    logEntries.push({ ...m, type: 'direct', dateObj: new Date(m.timestamp) });
+                });
+            }
+
+            // Grab Verification Remarks from appointments
+            apps.forEach(app => {
+                if (app.remarks && app.remarks.trim() !== '') {
+                    // Fallback date if processedAt isn't available
+                    let dObj = app.processedAt ? new Date(app.processedAt) : new Date(`${app.date}T12:00:00`);
+                    logEntries.push({
+                        id: app.id,
+                        text: app.remarks,
+                        type: 'remark',
+                        status: 'archived', // Remarks are permanent, cannot be recalled
+                        dateObj: dObj,
+                        displayDate: `${app.date} ${app.time}`
+                    });
+                }
+            });
+
+            // Sort Logs Newest First
+            logEntries.sort((a, b) => b.dateObj - a.dateObj);
+
+            logBody.innerHTML = '';
+            if (logEntries.length === 0) {
+                logBody.innerHTML = `<tr><td colspan="4" class="px-4 py-6 text-center text-slate-400 italic">No communication history found.</td></tr>`;
+            } else {
+                logEntries.forEach(log => {
+                    const isRecalled = log.status === 'recalled';
+                    const isRemark = log.type === 'remark';
+                    const timeString = log.displayDate || log.dateObj.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                    let typeBadge = isRemark
+                        ? `<span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest">Verification Remark</span>`
+                        : `<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest">Direct Msg</span>`;
+
+                    let actionHtml = '';
+                    if (log.type === 'direct' && log.status === 'active') {
+                        actionHtml = `<button onclick="recallMessage('${log.id}')" class="text-xs text-red-500 font-bold hover:bg-red-50 px-2 py-1 rounded transition-colors">Recall</button>`;
+                    } else if (isRecalled) {
+                        actionHtml = `<span class="text-[10px] text-slate-400 font-bold uppercase italic">Recalled</span>`;
+                    } else if (isRemark) {
+                        actionHtml = `<span class="text-[10px] text-slate-300 font-bold uppercase">Logged</span>`;
+                    }
+
+                    const textClass = isRecalled ? 'text-slate-400 line-through opacity-60' : 'text-slate-700 font-medium';
+
+                    logBody.innerHTML += `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">${timeString}</td>
+                            <td class="px-4 py-3">${typeBadge}</td>
+                            <td class="px-4 py-3 text-sm ${textClass}">${log.text}</td>
+                            <td class="px-4 py-3 text-right">${actionHtml}</td>
+                        </tr>
+                    `;
+                });
+            }
         }
 
         const usedAttempts = apps.length;
@@ -1996,6 +2057,7 @@ async function openStudentDetailsModal(student) {
 
     } catch (e) {
         showToast("Error loading student history");
+        console.error(e);
     }
 }
 
@@ -2033,7 +2095,6 @@ async function grantExtraAttempts() {
     }
 }
 
-// --- DIRECTORY MESSAGE ENGINE ---
 async function saveDirectoryMessage() {
     if (!activeModalStudentUid) {
         showToast("Error: No student ID found to attach message to.");
@@ -2041,39 +2102,143 @@ async function saveDirectoryMessage() {
     }
 
     const msg = document.getElementById('dirAdminRemarkInput').value.trim();
-    const btn = document.querySelector('button[onclick="saveDirectoryMessage()"]');
+    if (!msg) return showToast("Please enter a message to send.");
 
-    let originalText = "Save & Send Message";
+    const btn = document.querySelector('button[onclick="saveDirectoryMessage()"]');
+    let originalText = "Send";
     if (btn) {
         originalText = btn.innerHTML;
         btn.innerHTML = "Saving...";
     }
 
+    // Create detailed message object
+    const newMessage = {
+        id: 'msg_' + Date.now(),
+        text: msg,
+        timestamp: new Date().toISOString(),
+        status: 'active'
+    };
+
     try {
-        // 1. Update Master Roster using set with merge (safer than update)
-        await db.collection('master_students').doc(activeModalStudentUid).set({ adminRemark: msg }, { merge: true });
+        const docRef = db.collection('master_students').doc(activeModalStudentUid);
+        const doc = await docRef.get();
 
-        // 2. Fetch to see if they have a live account UID attached
-        const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
-        const data = doc.data();
+        // Grab existing messages or start a new array
+        let currentMessages = doc.exists && doc.data().directMessages ? doc.data().directMessages : [];
+        currentMessages.push(newMessage);
 
-        // 3. If they are signed up, push it to their live user profile instantly
-        if (data && data.uid) {
-            await db.collection('users').doc(data.uid).set({ adminRemark: msg }, { merge: true });
+        // FIX: Save BOTH the log array AND the adminRemark string for the pinned banner
+        await docRef.set({
+            directMessages: currentMessages,
+            adminRemark: msg
+        }, { merge: true });
+
+        // Push to live user profile if they have one
+        const data = doc.data() || {};
+        if (data.uid) {
+            await db.collection('users').doc(data.uid).set({
+                directMessages: currentMessages,
+                adminRemark: msg
+            }, { merge: true });
         }
 
-        showToast(msg ? "Message Pinned to Student's Dashboard!" : "Message Recalled & Cleared.");
+        showToast("Message Sent & Pinned to Dashboard!");
+        document.getElementById('dirAdminRemarkInput').value = '';
 
-        // Refresh the modal safely, injecting the PRN back in so the modal doesn't break
-        openStudentDetailsModal({ ...data, prn: activeModalStudentUid });
+        // FIX: Explicitly pass the freshly updated arrays and remarks into the modal refresh!
+        openStudentDetailsModal({
+            ...data,
+            prn: activeModalStudentUid,
+            directMessages: currentMessages,
+            adminRemark: msg
+        });
 
     } catch (e) {
         console.error(e);
-        showToast("Error saving message. Check console.");
+        showToast("Error saving message.");
     } finally {
         if (btn) btn.innerHTML = originalText;
     }
 }
+
+// --- RECALL LOGIC ---
+let pendingRecallMsgId = null;
+
+// This now just opens the confirmation modal
+function recallMessage(msgId) {
+    pendingRecallMsgId = msgId;
+    document.getElementById('recallConfirmModal').classList.remove('hidden');
+}
+
+function closeRecallConfirmModal() {
+    pendingRecallMsgId = null;
+    document.getElementById('recallConfirmModal').classList.add('hidden');
+}
+
+// This executes the actual recall after the admin clicks "Yes, Recall"
+async function confirmAndExecuteRecall() {
+    if (!activeModalStudentUid || !pendingRecallMsgId) return;
+
+    const btn = document.getElementById('confirmRecallBtn');
+    let originalText = "Yes, Recall";
+    if (btn) {
+        originalText = btn.innerHTML;
+        btn.innerHTML = "Recalling...";
+    }
+
+    try {
+        const docRef = db.collection('master_students').doc(activeModalStudentUid);
+        const doc = await docRef.get();
+        if (!doc.exists) return;
+
+        let messages = doc.data().directMessages || [];
+        const msgIndex = messages.findIndex(m => m.id === pendingRecallMsgId);
+
+        if (msgIndex > -1) {
+            // Change status to recalled
+            messages[msgIndex].status = 'recalled';
+
+            // Find the most recent active message to fall back to (if any)
+            let updatedRemark = "";
+            const activeMsgs = messages.filter(m => m.status === 'active');
+            if (activeMsgs.length > 0) {
+                updatedRemark = activeMsgs[activeMsgs.length - 1].text;
+            }
+
+            // Update Database
+            await docRef.set({
+                directMessages: messages,
+                adminRemark: updatedRemark
+            }, { merge: true });
+
+            if (doc.data().uid) {
+                await db.collection('users').doc(doc.data().uid).set({
+                    directMessages: messages,
+                    adminRemark: updatedRemark
+                }, { merge: true });
+            }
+
+            showToast("Message Recalled Successfully.");
+            closeRecallConfirmModal();
+
+            // Explicitly pass the updated data to the modal so it refreshes instantly
+            openStudentDetailsModal({
+                ...doc.data(),
+                prn: activeModalStudentUid,
+                directMessages: messages,
+                adminRemark: updatedRemark
+            });
+        }
+    } catch (e) {
+        console.error(e);
+        showToast("Error recalling message.");
+    } finally {
+        if (btn) btn.innerHTML = originalText;
+    }
+}
+
+// Add this line to the bottom of main.js with the other exports
+window.recallMessage = recallMessage;
 window.saveDirectoryMessage = saveDirectoryMessage;
 
 window.saveDirectoryMessage = saveDirectoryMessage;
@@ -2816,6 +2981,8 @@ window.submitEditStudent = submitEditStudent;
 window.openActionConfirmModal = openActionConfirmModal;
 window.closeActionConfirmModal = closeActionConfirmModal;
 window.executeConfirmedAction = executeConfirmedAction;
+window.closeRecallConfirmModal = closeRecallConfirmModal;
+window.confirmAndExecuteRecall = confirmAndExecuteRecall;
 
 window.toggleCustomDate = toggleCustomDate;
 

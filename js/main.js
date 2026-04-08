@@ -13,11 +13,8 @@ let sessionCountdown = null;
 let remainingSeconds = 420;
 let globalDelayMinutes = 0;
 
-window.rawMasterData = [];
-window.rawUsersData = [];
-window.rawAppsData = [];
-window.allStudentsData = [];
-window.unifiedCollegeData = [];
+let allAppointmentsData = [];
+let allStudentsData = [];
 let activeModalStudentUid = null;
 
 // Notification & Sync State
@@ -87,16 +84,15 @@ const deptToDay = {
     'DS': { day: 1, name: 'Monday' },
     'AIML': { day: 2, name: 'Tuesday' },
     'COMP': { day: 3, name: 'Wednesday' },
-    'IT': { day: 4, name: 'Thursday' },
-    'MECH': { day: 5, name: 'Friday' },
-    'CIVIL': { day: 5, name: 'Friday' },
-    'AUTOMOBILE': { day: 5, name: 'Friday' }
+    'IT': { day: 4, name: 'Thursday' }, // Fixed: Moved from Friday to Thursday
+    'MECH': { day: 6, name: 'Saturday' }, // Fixed: Moved from Saturday to Friday
+    'CIVIL': { day: 6, name: 'Saturday' }, // Fixed: Moved from Saturday to Friday
+    'AUTOMOBILE': { day: 6, name: 'Saturday' } // Fixed: Moved from Saturday to Friday
 };
 
 // ==================== HELPER FUNCTIONS ====================
 function showToast(m) {
     const t = document.getElementById('toast');
-    if (!t) return;
     document.getElementById('toastMessage').textContent = m;
     t.classList.remove('translate-y-20', 'opacity-0');
     setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 3000);
@@ -144,19 +140,19 @@ function getSlotTokenNumber(selectedTimeStr) {
     return tokenIndex;
 }
 
+// Proper numerical time sorting function
 function parseTime(timeStr) {
     if (!timeStr || timeStr === "--:--") return 0;
-    try {
-        const parts = String(timeStr).trim().split(/\s+/);
-        if (parts.length < 2) return 0;
-        let [hours, minutes] = parts[0].split(':').map(Number);
-        let modifier = parts[1].toUpperCase();
-        if (modifier === 'PM' && hours !== 12) hours += 12;
-        if (modifier === 'AM' && hours === 12) hours = 0;
-        return hours * 60 + minutes;
-    } catch (err) { return 0; }
+    const parts = timeStr.trim().split(/\s+/);
+    if (parts.length < 2) return 0;
+    let [hours, minutes] = parts[0].split(':').map(Number);
+    let modifier = parts[1].toUpperCase();
+    if (modifier === 'PM' && hours !== 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
 }
 
+// Centralized Master Delay Calculation Engine for BOTH views
 function getMasterDelay() {
     const now = new Date();
     let masterDelay = globalDelayMinutes;
@@ -167,6 +163,7 @@ function getMasterDelay() {
             const headDate = new Date();
             headDate.setHours(Math.floor(headMins / 60), (headMins % 60) + globalDelayMinutes, 0, 0);
 
+            // Use exact elapsed minutes for 1:1 synchronization
             const driftMins = Math.floor((now - headDate) / 60000);
             if (driftMins > 0) {
                 masterDelay += driftMins;
@@ -186,112 +183,108 @@ function initApp() {
 
 function startLiveClock() {
     const updateTime = () => {
-        try {
-            const now = new Date();
-            const clockEl = document.getElementById('liveClock');
-            if (clockEl) {
-                const options = { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
-                clockEl.textContent = now.toLocaleString('en-US', options).replace(/,/g, ' |');
-            }
+        const now = new Date();
 
-            let masterDelay = getMasterDelay();
+        const clockEl = document.getElementById('liveClock');
+        if (clockEl) {
+            const options = { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+            clockEl.textContent = now.toLocaleString('en-US', options).replace(/,/g, ' |');
+        }
 
-            if (currentUserType === 'student' && window.currentStudentActiveApp) {
-                const activeApp = window.currentStudentActiveApp;
-                checkScheduledNotifications(activeApp, masterDelay);
+        // ONE unified delay for everyone in the system
+        let masterDelay = getMasterDelay();
 
-                const waitEl = document.getElementById('waitTime');
-                const waitLabel = document.getElementById('waitLabel');
-                const slotEl = document.getElementById('yourSlotTime');
+        if (currentUserType === 'student' && window.currentStudentActiveApp) {
+            const activeApp = window.currentStudentActiveApp;
+            checkScheduledNotifications(activeApp, masterDelay);
 
-                if (waitEl && waitLabel && slotEl && activeApp.time) {
-                    const originalStart = activeApp.time ? String(activeApp.time).toLowerCase() : "--:--";
-                    const originalEnd = originalStart !== "--:--" ? safeAddMinutes(originalStart, 7) : "--:--";
+            const waitEl = document.getElementById('waitTime');
+            const waitLabel = document.getElementById('waitLabel');
+            const slotEl = document.getElementById('yourSlotTime');
 
-                    if (activeApp.status === 'current' && activeApp.isProcessing) {
-                        waitEl.textContent = "In Progress";
-                        waitLabel.textContent = "Queue Status";
-                        waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-blue-600";
-                    } else if (isQueuePaused) {
-                        waitEl.textContent = "Paused";
-                        waitLabel.textContent = "Queue Status";
-                        waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-amber-500";
-                    } else if (masterDelay > 0) {
-                        waitEl.textContent = `+${masterDelay} mins`;
-                        waitLabel.textContent = "Running Late";
-                        waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-red-500";
-                    } else {
-                        waitEl.textContent = "On Time";
-                        waitLabel.textContent = "Queue Status";
-                        waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-emerald-500";
-                    }
+            if (waitEl && waitLabel && slotEl && activeApp.time) {
+                const originalStart = activeApp.time ? String(activeApp.time).toLowerCase() : "--:--";
+                const originalEnd = originalStart !== "--:--" ? safeAddMinutes(originalStart, 7) : "--:--";
 
-                    if (masterDelay > 0 && originalStart !== "--:--") {
-                        const delayedEnd = safeAddMinutes(originalEnd, masterDelay);
-                        let delayedStart = safeAddMinutes(originalStart, masterDelay);
-                        if (activeApp.status === 'current') delayedStart = originalStart;
+                if (activeApp.status === 'current' && activeApp.isProcessing) {
+                    waitEl.textContent = "In Progress";
+                    waitLabel.textContent = "Queue Status";
+                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-blue-600";
+                } else if (isQueuePaused) {
+                    waitEl.textContent = "Paused";
+                    waitLabel.textContent = "Queue Status";
+                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-amber-500";
+                } else if (masterDelay > 0) {
+                    waitEl.textContent = `+${masterDelay} mins`;
+                    waitLabel.textContent = "Running Late";
+                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-red-500";
+                } else {
+                    waitEl.textContent = "On Time";
+                    waitLabel.textContent = "Queue Status";
+                    waitEl.className = "text-2xl md:text-3xl lg:text-4xl font-bold text-emerald-500";
+                }
 
-                        slotEl.innerHTML = `
-                            <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
-                                SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
+                if (masterDelay > 0 && originalStart !== "--:--") {
+                    const delayedEnd = safeAddMinutes(originalEnd, masterDelay);
+                    let delayedStart = safeAddMinutes(originalStart, masterDelay);
+                    if (activeApp.status === 'current') delayedStart = originalStart;
+
+                    slotEl.innerHTML = `
+                        <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
+                            SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="block text-[10px] uppercase font-bold text-red-400">Expected</span>
+                                <span class="text-xl font-bold text-red-500 tracking-tight leading-none block mt-1">${delayedStart} - ${delayedEnd}</span>
                             </div>
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <span class="block text-[10px] uppercase font-bold text-red-400">Expected</span>
-                                    <span class="text-xl font-bold text-red-500 tracking-tight leading-none block mt-1">${delayedStart} - ${delayedEnd}</span>
-                                </div>
-                                <div class="bg-red-50 border border-red-100 rounded-lg px-2 py-1 text-center shadow-sm">
-                                    <span class="block text-[8px] uppercase font-black tracking-widest text-red-400 leading-none mb-0.5">Delayed</span>
-                                    <span class="text-sm font-black text-red-600">+${masterDelay}m</span>
-                                </div>
+                            <div class="bg-red-50 border border-red-100 rounded-lg px-2 py-1 text-center shadow-sm">
+                                <span class="block text-[8px] uppercase font-black tracking-widest text-red-400 leading-none mb-0.5">Delayed</span>
+                                <span class="text-sm font-black text-red-600">+${masterDelay}m</span>
                             </div>
-                        `;
-                    } else {
-                        slotEl.innerHTML = `
-                            <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
-                                SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
+                        </div>
+                    `;
+                } else {
+                    slotEl.innerHTML = `
+                        <div class="text-[11px] text-slate-500 font-bold mb-2 tracking-wide uppercase">
+                            SCH: <span class="text-slate-700">${originalStart} - ${originalEnd}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="block text-[10px] uppercase font-bold text-emerald-500">Expected</span>
+                                <span class="text-xl font-bold text-emerald-600 tracking-tight leading-none block mt-1">${originalStart} - ${originalEnd}</span>
                             </div>
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <span class="block text-[10px] uppercase font-bold text-emerald-500">Expected</span>
-                                    <span class="text-xl font-bold text-emerald-600 tracking-tight leading-none block mt-1">${originalStart} - ${originalEnd}</span>
-                                </div>
-                                <div class="bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 text-center shadow-sm">
-                                    <span class="block text-[8px] uppercase font-black tracking-widest text-emerald-500 leading-none mb-0.5">Status</span>
-                                    <span class="text-sm font-black text-emerald-600">On Time</span>
-                                </div>
+                            <div class="bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 text-center shadow-sm">
+                                <span class="block text-[8px] uppercase font-black tracking-widest text-emerald-500 leading-none mb-0.5">Status</span>
+                                <span class="text-sm font-black text-emerald-600">On Time</span>
                             </div>
-                        `;
-                    }
+                        </div>
+                    `;
                 }
             }
+        }
 
-            const tokenEl = document.getElementById('currentToken');
-            if (tokenEl && window.currentActiveTokenData) {
-                const data = window.currentActiveTokenData;
-                const headMins = parseTime(data.time);
-                if (headMins > 0) {
-                    const scheduledDate = new Date();
-                    scheduledDate.setHours(Math.floor(headMins / 60), (headMins % 60) + globalDelayMinutes, 0, 0);
+        const tokenEl = document.getElementById('currentToken');
+        if (tokenEl && window.currentActiveTokenData) {
+            const data = window.currentActiveTokenData;
+            const headMins = parseTime(data.time);
+            if (headMins > 0) {
+                const scheduledDate = new Date();
+                scheduledDate.setHours(Math.floor(headMins / 60), (headMins % 60) + globalDelayMinutes, 0, 0);
 
-                    if (data.isProcessing || now >= scheduledDate) {
-                        tokenEl.textContent = data.token;
-                    } else {
-                        tokenEl.textContent = "--";
-                    }
+                if (data.isProcessing || now >= scheduledDate) {
+                    tokenEl.textContent = data.token;
+                } else {
+                    tokenEl.textContent = "--";
                 }
-            } else if (tokenEl) {
-                tokenEl.textContent = "--";
             }
-        } catch (err) {
-            console.error("Clock update error:", err);
+        } else if (tokenEl) {
+            tokenEl.textContent = "--";
         }
     };
-
     updateTime();
     setInterval(updateTime, 1000);
 }
-
 function listenToQueueSettings() {
     db.collection('settings').doc('queueStatus').onSnapshot(doc => {
         if (doc.exists) {
@@ -307,15 +300,21 @@ function listenToQueueSettings() {
         }
     });
 
+    // Listen to System Lifecycle Settings
     db.collection('settings').doc('lifecycle').onSnapshot(doc => {
-        let data = { academicYear: "2025-2026", mahadbtWindowOpen: false };
+        let data = {};
         if (doc.exists) {
             data = doc.data();
+        } else {
+            // Auto-initialize the database document if it doesn't exist yet
+            data = { academicYear: "2025-2026", mahadbtWindowOpen: false };
+            db.collection('settings').doc('lifecycle').set(data);
         }
 
         window.systemAcademicYear = data.academicYear || "2025-2026";
         window.isMahadbtWindowOpen = data.mahadbtWindowOpen || false;
 
+        // Update Admin UI
         const yearDisplay = document.getElementById('adminSystemYearDisplay');
         if (yearDisplay) yearDisplay.textContent = window.systemAcademicYear;
 
@@ -333,11 +332,12 @@ function listenToQueueSettings() {
             }
         }
 
+        // Refresh Student Edit Modal if it's currently open
         const updateModal = document.getElementById('updateProfileModal');
         if (updateModal && !updateModal.classList.contains('hidden') && typeof window.toggleEditProfile === 'function') {
             window.toggleEditProfile();
         }
-    }, err => console.error("Lifecycle Snapshot Error: ", err));
+    });
 
     db.collection('appointments').where('status', '==', 'current').limit(1).onSnapshot(snap => {
         if (!snap.empty) {
@@ -462,9 +462,6 @@ function setUserType(type) {
     const authTabs = document.getElementById('authTabs');
     const authTitle = document.getElementById('authTitle');
 
-    const loginIdLabel = document.getElementById('loginIdLabel');
-    const prnInput = document.getElementById('prnInput');
-
     if (type === 'student') {
         studentToggle.classList.add('bg-emerald-500', 'text-white');
         studentToggle.classList.remove('text-slate-400');
@@ -473,12 +470,6 @@ function setUserType(type) {
         adminToggle.classList.remove('bg-violet-500', 'text-white');
         adminToggle.classList.add('text-slate-400', 'hover:text-white');
         if (signupTab) signupTab.classList.remove('hidden');
-
-        if (loginIdLabel) loginIdLabel.textContent = "PRN Number";
-        if (prnInput) {
-            prnInput.placeholder = "16-digit PRN";
-            prnInput.type = "text";
-        }
     } else {
         adminToggle.classList.add('bg-violet-500', 'text-white');
         adminToggle.classList.remove('text-slate-400');
@@ -488,12 +479,6 @@ function setUserType(type) {
         studentToggle.classList.add('text-slate-400', 'hover:text-white');
         if (signupTab) signupTab.classList.add('hidden');
         setAuthMode('login');
-
-        if (loginIdLabel) loginIdLabel.textContent = "Admin Email";
-        if (prnInput) {
-            prnInput.placeholder = "admin@scholarswift.com";
-            prnInput.type = "email";
-        }
     }
 }
 
@@ -543,7 +528,7 @@ function setAuthMode(mode) {
 async function handleAuth(event) {
     event.preventDefault();
 
-    const prnInput = document.getElementById('prnInput') || document.getElementById('emailInput');
+    const prnInput = document.getElementById('prnInput');
     const prn = prnInput.value.toUpperCase().trim();
 
     const passwordInput = document.getElementById('passwordInput');
@@ -559,12 +544,13 @@ async function handleAuth(event) {
                 const contactNo = document.getElementById('contactInput') ? document.getElementById('contactInput').value.trim() : "";
                 const mahadbtId = document.getElementById('mahadbtIdInput') ? document.getElementById('mahadbtIdInput').value.trim() : "";
 
+                // --- SIGN-UP STEP 1: VERIFY DATA ---
                 if (window.currentSignupStep === 1 || !window.currentSignupStep) {
                     if (!prn) throw new Error("16-digit PRN is required to verify!");
 
                     const masterDoc = await db.collection('master_students').doc(prn).get();
                     if (!masterDoc.exists) {
-                        throw new Error("PRN not found in official roster. Please contact the Verification Cell.");
+                        throw new Error("PRN not found in official roster. Contact Admin.");
                     }
 
                     const masterData = masterDoc.data();
@@ -572,6 +558,7 @@ async function handleAuth(event) {
                         throw new Error("An account with this PRN already exists. Please Sign In.");
                     }
 
+                    // Success! Show Step 2
                     document.getElementById('fetchedName').textContent = masterData.name;
                     document.getElementById('fetchedDept').textContent = masterData.department;
                     document.getElementById('fetchedYear').textContent = yearLabels[masterData.currentYear] || `Year ${masterData.currentYear}`;
@@ -590,11 +577,11 @@ async function handleAuth(event) {
 
                     return;
                 }
+                // --- SIGN-UP STEP 2: CREATE ACCOUNT ---
                 else if (window.currentSignupStep === 2) {
-                    if (!mahadbtId || !password || !contactNo) throw new Error("Password, Contact Number, and MahaDBT ID are required!");
+                    if (!mahadbtId || !password) throw new Error("Password and MahaDBT ID are required to complete sign up!");
 
                     const masterData = window.verifiedMasterData;
-
                     const userCredential = await auth.createUserWithEmailAndPassword(dummyAuthEmail, password);
 
                     const studentData = {
@@ -671,27 +658,30 @@ function showStudentDashboard() {
         if (el) el.textContent = value || "--";
     }
 
+    // Helper function to update the remark banner dynamically
     function refreshRemarkBanner() {
         const remarksBlock = document.getElementById('studentRemarksBlock');
         const remarkTextEl = document.getElementById('studentRemarkText');
+
         const relevantApp = window.currentStudentActiveApp || (window.allStudentApps && window.allStudentApps[0]);
         const displayRemark = currentUser.adminRemark || (relevantApp ? relevantApp.remarks : '');
-        const displayDate = currentUser.adminRemarkTimestamp || '';
 
         if (displayRemark && displayRemark.trim() !== '') {
             if (remarksBlock) remarksBlock.classList.remove('hidden');
-            let timeHtml = displayDate ? `<span class="block text-[10px] font-bold text-violet-400 mt-1.5">${displayDate}</span>` : '';
-            if (remarkTextEl) remarkTextEl.innerHTML = `"${displayRemark}" ${timeHtml}`;
+            if (remarkTextEl) remarkTextEl.textContent = `"${displayRemark}"`;
         } else {
             if (remarksBlock) remarksBlock.classList.add('hidden');
         }
     }
 
+    // NEW: Real-time listener for the User Profile (Catches live Admin Remarks & Extra Attempts instantly)
     if (!window.userProfileListener) {
         window.userProfileListener = db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
             if (doc.exists) {
                 currentUser = { ...currentUser, ...doc.data() };
-                refreshRemarkBanner();
+                refreshRemarkBanner(); // Instantly update the message
+
+                // Instantly update attempts if Admin grants them
                 if (window.allStudentApps) {
                     const attemptsEl = document.getElementById('profileAttempts');
                     if (attemptsEl) {
@@ -720,7 +710,7 @@ function showStudentDashboard() {
                 return parseTime(b.time) - parseTime(a.time);
             });
 
-            window.allStudentApps = allApps;
+            window.allStudentApps = allApps; // Save globally so the profile listener can use it
 
             const usedAttempts = allApps.length;
             const extraAttempts = currentUser.extraAttempts || 0;
@@ -737,70 +727,6 @@ function showStudentDashboard() {
             const lastProcessedApp = allApps.find(a => ['pending', 'pending_closed', 'no_show', 'no_show_closed'].includes(a.status));
 
             window.currentStudentActiveApp = activeApp || null;
-
-            let myTrueStatus = "not_booked";
-            if (isVerified) {
-                myTrueStatus = "verified";
-            } else if (lastProcessedApp && String(lastProcessedApp.status).includes('pending')) {
-                myTrueStatus = "pending";
-            } else if (activeApp) {
-                myTrueStatus = "waiting";
-            } else if (allApps[0] && allApps[0].status.includes('no_show')) {
-                myTrueStatus = "no_show";
-            }
-
-            if (!window.studentAnnounceListener) {
-                window.studentAnnounceListener = db.collection('announcements').orderBy('createdAt', 'desc').onSnapshot(announceSnap => {
-                    const container = document.getElementById('studentGlobalAnnouncements');
-                    if (!container) return;
-
-                    let activeHtml = "";
-                    let newAnnouncementsFound = false;
-
-                    announceSnap.forEach(doc => {
-                        const ann = doc.data();
-
-                        if (ann.isRevoked) return;
-
-                        const deptMatch = ann.targetDept === 'ALL' || ann.targetDept === currentUser.department;
-                        const yearMatch = ann.targetYear === 'ALL' || ann.targetYear === String(currentUser.currentYear);
-                        const statusMatch = ann.targetStatus === 'ALL' || ann.targetStatus === myTrueStatus;
-
-                        if (deptMatch && yearMatch && statusMatch) {
-                            activeHtml += `
-                                <div class="bg-blue-50/90 border-l-4 border-blue-500 p-4 rounded-r-xl shadow-sm mb-3 relative animate-slide">
-                                    <div class="flex justify-between items-start">
-                                        <div class="flex items-center gap-2 mb-1">
-                                            <span class="flex h-2 w-2 relative">
-                                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                              <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                                            </span>
-                                            <h4 class="text-xs font-black text-blue-800 uppercase tracking-widest">Admin Broadcast</h4>
-                                        </div>
-                                        <span class="text-[10px] font-bold text-blue-400">${ann.timestampString || 'Just now'}</span>
-                                    </div>
-                                    <p class="text-sm text-blue-900 font-medium mt-1">${ann.message}</p>
-                                </div>
-                            `;
-
-                            if (!window.seenAnnouncements) window.seenAnnouncements = new Set();
-                            if (!window.seenAnnouncements.has(doc.id)) {
-                                newAnnouncementsFound = true;
-                                window.seenAnnouncements.add(doc.id);
-                            }
-                        }
-                    });
-
-                    if (activeHtml !== "") {
-                        container.innerHTML = activeHtml;
-                        container.classList.remove('hidden');
-                        if (newAnnouncementsFound) showToast("New Admin Announcement!");
-                    } else {
-                        container.classList.add('hidden');
-                        container.innerHTML = "";
-                    }
-                });
-            }
 
             const banner = document.getElementById('studentStatusBanner');
             const statusText = document.getElementById('overallStatusText');
@@ -845,6 +771,7 @@ function showStudentDashboard() {
                 if (activeApp) {
                     bColor = 'border-blue-500'; iconBg = 'bg-blue-100'; iconText = 'text-blue-600';
                     if (!hasPendingDocs) title = "Verification Scheduled";
+
                     subtextHtml = missingHtml + `<div class="mt-2 text-sm font-medium text-blue-700 bg-blue-50 inline-block px-3 py-2 rounded-lg border border-blue-100 shadow-sm">📅 Scheduled for <span class="font-bold">${activeApp.date}</span> at <span class="font-bold">${activeApp.time}</span></div>`;
                     svg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>`;
                 } else {
@@ -875,6 +802,7 @@ function showStudentDashboard() {
                 statusIcon.innerHTML = `<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svg}</svg>`;
             }
 
+            // Call the helper to update the remarks banner!
             refreshRemarkBanner();
 
             const historyBody = document.getElementById('studentHistoryBody');
@@ -922,10 +850,17 @@ function showStudentDashboard() {
                 if (bookingContainer) bookingContainer.classList.add('hidden');
                 if (fineMessage) fineMessage.classList.add('hidden');
                 if (liveQueue) liveQueue.classList.remove('hidden');
+
                 document.getElementById('yourToken').textContent = activeApp.token;
 
                 const cancelBlock = document.getElementById('bannerCancelBlock');
-                if (cancelBlock) cancelBlock.classList.toggle('hidden', activeApp.status === 'current');
+                if (cancelBlock) {
+                    if (activeApp.status === 'current') {
+                        cancelBlock.classList.add('hidden');
+                    } else {
+                        cancelBlock.classList.remove('hidden');
+                    }
+                }
 
                 db.collection('appointments').where('date', '==', activeApp.date).where('status', '==', 'waiting').get().then(waitSnap => {
                     let waitingList = [];
@@ -933,7 +868,11 @@ function showStudentDashboard() {
                     waitingList.sort((a, b) => parseTime(a.time) - parseTime(b.time));
                     const position = waitingList.findIndex(s => s.token === activeApp.token);
                     const aheadEl = document.getElementById('peopleAhead');
-                    if (aheadEl) aheadEl.textContent = (activeApp.status === 'waiting') ? (position === -1 ? "0" : position) : "0";
+                    if (aheadEl && activeApp.status === 'waiting') {
+                        aheadEl.textContent = position === -1 ? "0" : position;
+                    } else if (aheadEl) {
+                        aheadEl.textContent = "0";
+                    }
                 });
 
                 const slotEl = document.getElementById('yourSlotTime');
@@ -941,6 +880,7 @@ function showStudentDashboard() {
 
             } else {
                 if (liveQueue) liveQueue.classList.add('hidden');
+
                 const cancelBlock = document.getElementById('bannerCancelBlock');
                 if (cancelBlock) cancelBlock.classList.add('hidden');
 
@@ -968,7 +908,6 @@ function showStudentDashboard() {
             }
         });
 }
-
 function openCancelModal() {
     document.getElementById('cancelConfirmModal').classList.remove('hidden');
 }
@@ -989,6 +928,7 @@ async function confirmCancelBooking() {
             const docId = snap.docs[0].id;
             await db.collection('appointments').doc(docId).update({ status: 'cancelled' });
             showToast("Appointment Cancelled. Attempt deducted.");
+
         }
         closeCancelModal();
     } catch (e) {
@@ -1031,7 +971,7 @@ function renderDocumentChecklist(student, appointment) {
     }
 }
 
-// ==================== ADMIN DASHBOARD & DATA PIPELINE ====================
+// ==================== ADMIN DASHBOARD ====================
 function showAdminDashboard() {
     document.getElementById('authPage').classList.add('hidden');
     document.getElementById('adminDashboard').classList.remove('hidden');
@@ -1040,6 +980,7 @@ function showAdminDashboard() {
 
     toggleAdminView('live');
 
+    // Calculate and display today's department schedule compactly
     const todayDayNum = new Date().getDay();
     let todaysDepts = [];
     for (const [dept, info] of Object.entries(deptToDay)) {
@@ -1048,9 +989,7 @@ function showAdminDashboard() {
 
     const deptBannerText = document.getElementById('adminTodayDeptText');
     if (deptBannerText) {
-        if (todayDayNum === 0) {
-            deptBannerText.textContent = `HOLIDAY (SUNDAY)`;
-        } else if (todaysDepts.length > 0) {
+        if (todaysDepts.length > 0) {
             deptBannerText.textContent = `TODAY: ${todaysDepts.join(', ')}`;
         } else {
             deptBannerText.textContent = `OPEN DAY (ALL)`;
@@ -1141,12 +1080,12 @@ function showAdminDashboard() {
     window.adminQueueSnapshotObj = db.collection('appointments').where('date', '==', todayStr)
         .onSnapshot(snap => {
             let list = [];
-            let waitingCount = 0;
+            let waitingCount = 0; // Track the queue
 
             snap.forEach(doc => {
                 const data = doc.data();
                 list.push({ id: doc.id, ...data });
-                if (data.status === 'waiting') waitingCount++;
+                if (data.status === 'waiting') waitingCount++; // Tally up waiting students
             });
             list.sort((a, b) => parseTime(a.time) - parseTime(b.time));
 
@@ -1154,6 +1093,7 @@ function showAdminDashboard() {
             window.renderAdminQueueTable();
             refreshActiveStudentDisplay();
 
+            // Instantly update the new UI counter!
             const queueCounter = document.getElementById('adminPeopleInQueue');
             if (queueCounter) queueCounter.textContent = waitingCount;
         });
@@ -1164,55 +1104,41 @@ function showAdminDashboard() {
             window.renderAdminQueueTable();
         }
     }, 1000);
+
+    if (window.adminAutoCallInterval) {
+        clearInterval(window.adminAutoCallInterval);
+        window.adminAutoCallInterval = null;
+    }
 }
 
 function toggleAdminView(view) {
     const liveView = document.getElementById('adminLiveQueueView');
     const statsView = document.getElementById('adminStatsView');
     const dirView = document.getElementById('adminDirectoryView');
-    const announceView = document.getElementById('adminAnnouncementsView');
 
-    [liveView, statsView, dirView, announceView].forEach(el => {
-        if (el) {
-            el.classList.add('hidden');
-            el.classList.remove('block');
-        }
-    });
+    if (liveView) liveView.classList.add('hidden');
+    if (statsView) statsView.classList.add('hidden');
+    if (dirView) dirView.classList.add('hidden');
 
-    ['btnViewStats', 'btnViewDirectory', 'btnViewAnnouncements'].forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) btn.classList.remove('bg-emerald-600', 'text-white');
-    });
-
-    if (view === 'live' && liveView) {
-        liveView.classList.remove('hidden');
-    } else if (view === 'stats' && statsView) {
-        statsView.classList.remove('hidden');
-        const btn = document.getElementById('btnViewStats');
-        if (btn) btn.classList.add('bg-emerald-600', 'text-white');
-        if (window.unifiedCollegeData && window.unifiedCollegeData.length > 0) applyFilters();
-    } else if (view === 'directory' && dirView) {
-        dirView.classList.remove('hidden');
-        const btn = document.getElementById('btnViewDirectory');
-        if (btn) btn.classList.add('bg-emerald-600', 'text-white');
+    if (view === 'stats') {
+        if (statsView) statsView.classList.remove('hidden');
+        startLiveAnalytics();
+    } else if (view === 'directory') {
+        // FIX: Actually unhide the directory and fetch the data!
+        if (dirView) dirView.classList.remove('hidden');
         loadStudentDirectory();
-    } else if (view === 'announcements' && announceView) {
-        announceView.classList.remove('hidden');
-        const btn = document.getElementById('btnViewAnnouncements');
-        if (btn) btn.classList.add('bg-emerald-600', 'text-white');
-        if (typeof initAdminAnnouncementListener === 'function') initAdminAnnouncementListener();
+    } else {
+        if (liveView) liveView.classList.remove('hidden');
     }
-
-    window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
 async function refreshActiveStudentDisplay() {
     const snap = await db.collection('appointments').where('status', 'in', ['current', 'verified', 'pending', 'no_show']).limit(1).get();
 
     const dossier = document.getElementById('activeDossier');
-    if (!dossier) return;
     const container = dossier.parentElement;
 
+    // UI Elements to toggle based on Empty vs Active state
     const timerContainer = document.getElementById('timerContainer');
     const studentMetaCards = document.getElementById('studentMetaCards');
     const adminChecklistBlock = document.getElementById('adminChecklistBlock');
@@ -1232,16 +1158,18 @@ async function refreshActiveStudentDisplay() {
     if (oldFlag) oldFlag.remove();
 
     if (!snap.empty) {
+        // --- DESK IS OCCUPIED ---
         const docRef = snap.docs[0];
         const data = docRef.data();
         const status = data.status;
 
+        // Unhide all the active UI blocks
         if (timerContainer) timerContainer.classList.remove('hidden');
         if (studentMetaCards) studentMetaCards.classList.remove('hidden');
         if (adminChecklistBlock) adminChecklistBlock.classList.remove('hidden');
         if (actionButtonsBlock) actionButtonsBlock.classList.remove('hidden');
         if (remarksBlock) remarksBlock.classList.remove('hidden');
-        if (emptyQueueGraphic) emptyQueueGraphic.classList.add('hidden');
+        if (emptyQueueGraphic) emptyQueueGraphic.classList.add('hidden'); // Hide the empty graphic
 
         if (remarksInput) {
             remarksInput.value = data.remarks || '';
@@ -1253,9 +1181,12 @@ async function refreshActiveStudentDisplay() {
         document.getElementById('activeSchType').textContent = data.scholarshipType;
         document.getElementById('adminCurrentToken').textContent = `TOKEN: ${data.token}`;
 
-        if (slotIndicator) slotIndicator.textContent = `Slot: ${data.time}`;
+        if (slotIndicator) {
+            slotIndicator.textContent = `Slot: ${data.time}`;
+        }
 
         if (['verified', 'pending', 'no_show'].includes(status)) {
+            // STUDENT IS FINISHED
             isTimerRunning = false;
             const flag = document.createElement('div');
             flag.id = 'resultFlag';
@@ -1276,10 +1207,12 @@ async function refreshActiveStudentDisplay() {
             }
 
             container.appendChild(flag);
-            if (actionButtonsBlock) actionButtonsBlock.classList.add('hidden');
+
+            if (actionButtonsBlock) actionButtonsBlock.classList.add('hidden'); // Hide action buttons
             if (startTimerBtn) startTimerBtn.classList.add('hidden');
             if (sessionCountdown) clearInterval(sessionCountdown);
 
+            // Lock remarks
             if (remarksInput) {
                 remarksInput.readOnly = true;
                 remarksInput.classList.add('bg-slate-100', 'text-slate-500', 'cursor-not-allowed');
@@ -1289,6 +1222,7 @@ async function refreshActiveStudentDisplay() {
             if (saveRemarkBtn) saveRemarkBtn.classList.add('hidden');
 
         } else {
+            // STUDENT IS CURRENTLY ACTIVE
             if (!isTimerRunning && status === 'current') {
                 isTimerRunning = true;
                 startSessionTimer(420);
@@ -1308,17 +1242,23 @@ async function refreshActiveStudentDisplay() {
 
         const studentData = { scholarshipType: data.scholarshipType };
         const appointmentData = { id: docRef.id, documentVerification: data.documentVerification || {} };
+        // We only render the checklist if the block is actually visible
         if (typeof renderDocumentChecklist === 'function') {
             renderDocumentChecklist(studentData, appointmentData);
         }
 
     } else {
+        // --- QUEUE IS EMPTY ---
         isTimerRunning = false;
+
+        // INSTANTLY HIDE ALL UNNECESSARY CLUTTER
         if (timerContainer) timerContainer.classList.add('hidden');
         if (studentMetaCards) studentMetaCards.classList.add('hidden');
         if (adminChecklistBlock) adminChecklistBlock.classList.add('hidden');
         if (actionButtonsBlock) actionButtonsBlock.classList.add('hidden');
         if (remarksBlock) remarksBlock.classList.add('hidden');
+
+        // Show the beautiful "Empty" graphic
         if (emptyQueueGraphic) emptyQueueGraphic.classList.remove('hidden');
 
         document.getElementById('activeStudentName').textContent = "Desk Available";
@@ -1333,7 +1273,6 @@ async function refreshActiveStudentDisplay() {
         if (sessionCountdown) clearInterval(sessionCountdown);
     }
 }
-
 async function manualStartTimer() {
     isTimerRunning = true;
     const startBtn = document.getElementById('startTimerBtn');
@@ -1421,13 +1360,14 @@ async function updateActiveStatus(newStatus) {
             }
         }
 
+        // NEW: Capture Admin Remarks before updating the database
         const remarksInput = document.getElementById('adminRemarksInput');
         const remarkText = remarksInput ? remarksInput.value.trim() : "";
 
         await db.collection('appointments').doc(docRef.id).update({
             status: newStatus,
             processedAt: new Date().toISOString(),
-            remarks: remarkText
+            remarks: remarkText // Save the remark to the student's appointment record
         });
 
         let recoveredMins = 0;
@@ -1498,18 +1438,17 @@ async function nextToken() {
 function togglePause() {
     isQueuePaused = !isQueuePaused;
     const pauseBtn = document.getElementById('pauseBtn');
-    if (pauseBtn) {
-        if (isQueuePaused) {
-            if (sessionCountdown) clearInterval(sessionCountdown);
-            pauseBtn.textContent = "Resume Queue";
-            pauseBtn.className = "px-4 py-3 bg-amber-500 text-white font-semibold rounded-xl transition-all";
-        } else {
-            pauseBtn.textContent = "Pause Queue";
-            pauseBtn.className = "px-4 py-3 bg-slate-100 text-slate-600 font-semibold rounded-xl transition-all";
-            startSessionTimer(remainingSeconds);
-        }
+    if (isQueuePaused) {
+        if (sessionCountdown) clearInterval(sessionCountdown);
+        pauseBtn.textContent = "Resume Queue";
+        pauseBtn.className = "px-4 py-3 bg-amber-500 text-white font-semibold rounded-xl transition-all";
+    } else {
+        pauseBtn.textContent = "Pause Queue";
+        pauseBtn.className = "px-4 py-3 bg-slate-100 text-slate-600 font-semibold rounded-xl transition-all";
+        startSessionTimer(remainingSeconds);
     }
     db.collection('settings').doc('queueStatus').set({ isPaused: isQueuePaused });
+
 }
 
 // --- ADMIN ACTION CONFIRMATION MODAL ---
@@ -1573,6 +1512,7 @@ function executeConfirmedAction() {
     closeActionConfirmModal();
 }
 
+// --- DEDICATED ADMIN REMARKS MODAL LOGIC ---
 function openRemarkConfirmModal() {
     const name = document.getElementById('activeStudentName').textContent;
     if (!name || name === "Desk Available" || name === "--") {
@@ -1612,7 +1552,7 @@ async function confirmAndSaveRemark() {
 
 // ==================== MASTER ROSTER MANAGEMENT (ADMIN) ====================
 
-async function handleFileUpload(event) {
+function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -1629,61 +1569,45 @@ async function handleFileUpload(event) {
 
             let batch = db.batch();
             let count = 0;
-            let skipped = 0;
-
-            let seenPRNs = new Set();
-            let hasDuplicates = false;
 
             for (let i = 1; i < rows.length; i++) {
                 const cols = rows[i];
-                const rawPrn = cols[0] ? String(cols[0]).toUpperCase().trim() : null;
+                if (!cols || cols.length < 7) continue;
 
-                if (!rawPrn || rawPrn === 'UNDEFINED' || rawPrn.includes('---')) {
-                    skipped++;
-                    continue;
-                }
+                const grNumber = String(cols[0]).toUpperCase().trim();
+                if (!grNumber || grNumber === 'UNDEFINED') continue;
 
-                if (rawPrn.includes('E+') || seenPRNs.has(rawPrn)) {
-                    hasDuplicates = true;
-                    break;
-                }
-                seenPRNs.add(rawPrn);
-
-                const docRef = db.collection('master_students').doc(rawPrn);
+                const docRef = db.collection('master_students').doc(grNumber);
 
                 batch.set(docRef, {
-                    prn: rawPrn,
-                    firstName: cols[1] ? String(cols[1]).trim() : "Unknown",
-                    lastName: cols[2] ? String(cols[2]).trim() : "",
-                    name: `${cols[1] || ''} ${cols[2] || ''}`.trim() || "Unknown Student",
-                    department: cols[3] ? String(cols[3]).toUpperCase().trim() : "N/A",
-                    joiningYear: cols[4] ? String(cols[4]).trim() : "N/A",
-                    currentYear: cols[5] ? String(cols[5]).trim() : "1",
-                    scholarshipType: cols[6] ? String(cols[6]).trim() : "Not Specified",
+                    grNumber: grNumber,
+                    firstName: String(cols[1]).trim(),
+                    lastName: String(cols[2]).trim(),
+                    name: `${String(cols[1]).trim()} ${String(cols[2]).trim()}`,
+                    department: String(cols[3]).toUpperCase().trim(),
+                    joiningYear: String(cols[4]).trim(),
+                    currentYear: String(cols[5]).trim(),
+                    scholarshipType: String(cols[6]).trim(),
+                    email: cols[7] ? String(cols[7]).toLowerCase().trim() : "",
                     isRegistered: false
                 }, { merge: true });
 
                 count++;
 
-                if (count > 0 && count % 490 === 0) {
+                if (count % 490 === 0) {
                     await batch.commit();
                     batch = db.batch();
                 }
             }
 
-            if (hasDuplicates) {
-                document.getElementById('fileInput').value = "";
-                return showToast("ERROR: Excel corrupted your PRNs! Format Column A as 'Text' in Excel before pasting.");
-            }
-
             await batch.commit();
-            showToast(`Uploaded ${count} students successfully!`);
+            showToast(`Successfully uploaded ${count} students to Master Roster!`);
             document.getElementById('fileInput').value = "";
             loadStudentDirectory();
 
         } catch (error) {
             console.error("Excel Parsing Error: ", error);
-            showToast("Error reading file. Check the console for details.");
+            showToast("Error reading file. Ensure it is a valid Excel spreadsheet.");
         }
     };
     reader.readAsArrayBuffer(file);
@@ -1721,11 +1645,13 @@ async function submitSingleStudent(e) {
         showToast(`Student ${prn} added to Master Roster.`);
         closeAddStudentModal();
         loadStudentDirectory();
-    } catch (err) { showToast("Error adding student."); }
+    } catch (err) {
+        showToast("Error adding student.");
+    }
 }
 
 async function enableAdminEditMode() {
-    if (!activeModalStudentUid) return showToast("Error: No student selected.");
+    if (!activeModalStudentUid) return;
 
     try {
         const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
@@ -1738,13 +1664,13 @@ async function enableAdminEditMode() {
         document.getElementById('editJoinYear').value = data.joiningYear || '';
         document.getElementById('editCurrYear').value = data.currentYear || '';
         document.getElementById('editSchType').value = data.scholarshipType || '';
+        document.getElementById('editEmail').value = data.email || '';
 
         document.getElementById('editStudentModal').classList.remove('hidden');
     } catch (error) {
         showToast("Error fetching student details.");
     }
 }
-window.enableAdminEditMode = enableAdminEditMode;
 
 function closeEditStudentModal() {
     document.getElementById('editStudentModal').classList.add('hidden');
@@ -1760,15 +1686,23 @@ async function submitEditStudent(e) {
     const joiningYear = document.getElementById('editJoinYear').value;
     const currentYear = document.getElementById('editCurrYear').value;
     const scholarshipType = document.getElementById('editSchType').value;
+    const email = document.getElementById('editEmail').value.toLowerCase().trim();
 
     const updatedData = {
-        firstName, lastName, name: `${firstName} ${lastName}`,
-        department, joiningYear, currentYear, scholarshipType
+        firstName,
+        lastName,
+        name: `${firstName} ${lastName}`,
+        department,
+        joiningYear,
+        currentYear,
+        scholarshipType,
+        email
     };
 
     try {
         await db.collection('master_students').doc(activeModalStudentUid).update(updatedData);
-        const snap = await db.collection('users').where('prn', '==', activeModalStudentUid).get();
+
+        const snap = await db.collection('users').where('grNumber', '==', activeModalStudentUid).get();
         if (!snap.empty) {
             await db.collection('users').doc(snap.docs[0].id).update(updatedData);
         }
@@ -1777,6 +1711,7 @@ async function submitEditStudent(e) {
         closeEditStudentModal();
 
         document.getElementById('modalName').textContent = updatedData.name;
+        document.getElementById('modalEmail').textContent = updatedData.email;
         document.getElementById('modalDept').textContent = updatedData.department;
         document.getElementById('modalJoinYr').textContent = updatedData.joiningYear;
         document.getElementById('modalCurrYr').textContent = yearLabels[updatedData.currentYear] || updatedData.currentYear;
@@ -1784,34 +1719,49 @@ async function submitEditStudent(e) {
         document.getElementById('modalInitials').textContent = updatedData.firstName.charAt(0).toUpperCase();
 
         loadStudentDirectory();
-    } catch (err) { showToast("Error updating student."); }
+    } catch (err) {
+        showToast("Error updating student.");
+    }
 }
 
-// ==================== PIPELINE & ANALYTICS ENGINE ====================
 async function loadStudentDirectory() {
     try {
-        console.log("Fetching complete pipeline database...");
+        // 1. Fetch BOTH the Master Roster AND the Live User Profiles
+        const [masterSnap, usersSnap] = await Promise.all([
+            db.collection('master_students').get(),
+            db.collection('users').where('role', '==', 'student').get()
+        ]);
 
-        const masterSnap = await db.collection('master_students').get();
-        window.rawMasterData = [];
-        masterSnap.forEach(doc => window.rawMasterData.push(doc.data()));
-        window.allStudentsData = window.rawMasterData;
+        // 2. Map the live users by their PRN so we can grab their phone numbers
+        const liveUsersMap = {};
+        usersSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.grNumber) liveUsersMap[data.grNumber] = data;
+            if (data.prn) liveUsersMap[data.prn] = data;
+        });
 
-        const usersSnap = await db.collection('users').get();
-        window.rawUsersData = [];
-        usersSnap.forEach(doc => window.rawUsersData.push(doc.data()));
+        allStudentsData = [];
 
-        const appsSnap = await db.collection('appointments').get();
-        window.rawAppsData = [];
-        appsSnap.forEach(doc => window.rawAppsData.push(doc.data()));
+        // 3. Merge the data together
+        masterSnap.forEach(doc => {
+            const mData = doc.data();
+            const studentId = mData.grNumber || doc.id;
+            const uData = liveUsersMap[studentId] || {};
 
-        if (typeof filterDirectory === 'function') filterDirectory();
-        if (typeof processUnifiedAnalytics === 'function') processUnifiedAnalytics();
+            allStudentsData.push({
+                ...mData,
+                // If they signed up, grab their phone & MahaDBT ID, otherwise leave blank
+                contactNo: uData.contactNo || mData.contactNo || "",
+                mahadbtId: uData.mahadbtId || mData.mahadbtId || "",
+                prn: uData.prn || studentId,
+                uid: uData.uid || mData.uid
+            });
+        });
 
+        filterDirectory();
     } catch (e) {
-        console.error("Database Load Error:", e);
-        const tbody = document.getElementById('directoryTableBody');
-        if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="text-center py-10 text-red-500 font-bold">Error loading database. Check console.</td></tr>`;
+        console.error(e);
+        showToast("Error loading directory.");
     }
 }
 
@@ -1820,13 +1770,19 @@ function filterDirectory() {
     const tbody = document.getElementById('directoryTableBody');
     if (!tbody) return;
 
-    let newHtml = '';
+    tbody.innerHTML = ''; // Clear the loading text
 
-    const filtered = window.allStudentsData.filter(s => {
+    const filtered = allStudentsData.filter(s => {
+        // Bulletproof safety checks encompassing ALL merged data fields
         const safeName = s.name || "";
-        const safePRN = s.prn || "";
+        const safePRN = s.prn || s.grNumber || "";
+        const safeEmail = s.email || "";
         const safeDept = s.department || "";
-        const str = `${safeName} ${safePRN} ${safeDept}`.toLowerCase();
+        const safePhone = s.contactNo || "";
+        const safeMahaDBT = s.mahadbtId || "";
+
+        // Combine all searchable strings
+        const str = `${safeName} ${safePRN} ${safeEmail} ${safeDept} ${safePhone} ${safeMahaDBT}`.toLowerCase();
         return str.includes(query);
     });
 
@@ -1836,6 +1792,10 @@ function filterDirectory() {
     }
 
     filtered.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition-colors cursor-pointer group";
+        tr.onclick = () => openStudentDetailsModal(s);
+
         const statusBadge = s.isRegistered
             ? `<span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-[10px] font-black uppercase tracking-wider">Registered</span>`
             : `<span class="px-2 py-1 bg-slate-200 text-slate-600 rounded text-[10px] font-black uppercase tracking-wider">Unregistered</span>`;
@@ -1843,98 +1803,123 @@ function filterDirectory() {
         const safeName = s.name || "Unknown Student";
         const initial = safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?";
 
-        newHtml += `
-            <tr class="hover:bg-slate-50 transition-colors cursor-pointer group" onclick="window.openStudentProfile('${s.prn}')">
-                <td class="px-6 py-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center font-black shadow-sm group-hover:bg-violet-500 group-hover:text-white transition-colors">
-                            ${initial}
-                        </div>
-                        <div>
-                            <p class="font-bold text-slate-800">${safeName}</p>
-                        </div>
-                    </div>
-                </td>
-                <td class="px-6 py-4">
-                    <p class="font-bold text-slate-700">${s.prn || '--'}</p>
-                    <div class="text-[10px] uppercase font-bold text-slate-400 mt-1 flex items-center gap-2">
-                        <span>${s.department || '--'}</span> • <span>${yearLabels[s.currentYear] || s.currentYear || '--'}</span>
-                    </div>
-                </td>
-                <td class="px-6 py-4 text-center">
-                    ${statusBadge}
-                </td>
-            </tr>
-        `;
-    });
+        // Safely pull merged data
+        const displayPRN = s.prn || s.grNumber || "No PRN";
+        const displayMahaDBT = s.mahadbtId ? `MahaDBT: ${s.mahadbtId}` : "MahaDBT: Not Provided";
+        const displayEmail = s.email || "No Email";
+        const displayPhone = s.contactNo ? ` • ${s.contactNo}` : "";
 
-    tbody.innerHTML = newHtml;
+        tr.innerHTML = `
+            <td class="px-6 py-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center font-black shadow-sm group-hover:bg-violet-500 group-hover:text-white transition-colors shrink-0">
+                        ${initial}
+                    </div>
+                    <div>
+                        <p class="font-bold text-slate-800">${safeName}</p>
+                        <p class="text-[11px] font-bold text-violet-600 font-mono mt-0.5">${displayPRN}</p>
+                        <p class="text-[10px] text-slate-400 font-mono mt-0.5">${displayEmail}${displayPhone}</p>
+                    </div>
+                </div>
+            </td>
+            <td class="px-6 py-4">
+                <p class="font-bold text-emerald-600">${displayMahaDBT}</p>
+                <div class="text-[10px] uppercase font-bold text-slate-400 mt-1 flex items-center gap-2">
+                    <span>${s.department || '--'}</span> • <span>${yearLabels[s.currentYear] || s.currentYear || '--'}</span>
+                </div>
+            </td>
+            <td class="px-6 py-4 text-center">
+                ${statusBadge}
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
-window.openStudentProfile = function (prn) {
-    const student = window.allStudentsData.find(s => s.prn === prn);
-    if (student) {
-        openStudentDetailsModal(student);
-    } else {
-        showToast("Error locating student data.");
-    }
-};
-
 async function openStudentDetailsModal(student) {
+    // FIX: Properly grab the ID from the merged data object (fixes the broken message feature)
+    activeModalStudentUid = student.prn || student.grNumber || student.id;
+
+    // Safety check for corrupt missing names
+    const safeName = student.name || "Unknown Student";
+    document.getElementById('modalInitials').textContent = safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?";
+    document.getElementById('modalName').textContent = safeName;
+
+    document.getElementById('modalEmail').textContent = student.email || "No Email";
+
+    // FIX: Display the PRN properly here (fixes the blank space in the UI)
+    document.getElementById('modalGR').textContent = activeModalStudentUid || "--";
+
+    document.getElementById('modalPhone').textContent = student.contactNo || "--";
+    document.getElementById('modalDept').textContent = student.department;
+    document.getElementById('modalJoinYr').textContent = student.joiningYear;
+    document.getElementById('modalCurrYr').textContent = yearLabels[student.currentYear] || student.currentYear;
+    document.getElementById('modalSchType').textContent = student.scholarshipType;
+    document.getElementById('modalMahaDBT').textContent = student.mahadbtId || "Not Provided";
+
+    const tbody = document.getElementById('modalHistoryBody');
+    const statusEl = document.getElementById('modalCurrentStatus');
+    const pendingDocsEl = document.getElementById('modalPendingDocs');
+    const attemptsInfo = document.getElementById('modalAttemptsInfo');
+
+    // UI Elements to toggle based on Registration status
+    const msgBlock = document.getElementById('adminDirectMessageBlock');
+    const fineBlock = document.getElementById('adminFineBlock');
+    const remarkInput = document.getElementById('dirAdminRemarkInput');
+
+    pendingDocsEl.classList.add('hidden');
+    pendingDocsEl.innerHTML = '';
+
+    if (!student.isRegistered || !student.uid) {
+        // --- UNREGISTERED STUDENT STATE ---
+        tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">Student has not created an account yet.</td></tr>`;
+        statusEl.innerHTML = `<span class="text-slate-500 font-bold">Unregistered</span>`;
+        attemptsInfo.innerHTML = `<span class="text-slate-400 text-lg">N/A</span>`;
+
+        // Hide the action blocks because the student doesn't exist in the system yet
+        if (msgBlock) msgBlock.classList.add('hidden');
+        if (fineBlock) fineBlock.classList.add('hidden');
+
+        document.getElementById('studentDetailsModal').classList.remove('hidden');
+        return;
+    }
+
+    // --- REGISTERED STUDENT STATE ---
+    // Reveal the action blocks
+    if (msgBlock) {
+        msgBlock.classList.remove('hidden');
+
+        // FIX: Setup Recall Button Logic dynamically
+        let recallBtn = document.getElementById('recallDirMsgBtn');
+        if (student.adminRemark && student.adminRemark.trim() !== '') {
+            if (!recallBtn) {
+                recallBtn = document.createElement('button');
+                recallBtn.id = 'recallDirMsgBtn';
+                recallBtn.className = "w-full py-2 mt-3 bg-red-100 hover:bg-red-200 text-red-600 text-xs font-bold rounded-lg shadow-sm transition-all border border-red-200";
+                recallBtn.innerHTML = `
+                    <div class="flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        Recall / Delete Message
+                    </div>`;
+                recallBtn.onclick = () => {
+                    document.getElementById('dirAdminRemarkInput').value = '';
+                    saveDirectoryMessage(); // Saving an empty string clears the message
+                };
+                msgBlock.appendChild(recallBtn);
+            } else {
+                recallBtn.classList.remove('hidden');
+            }
+        } else {
+            if (recallBtn) recallBtn.classList.add('hidden');
+        }
+    }
+
+    if (fineBlock) fineBlock.classList.remove('hidden');
+
+    // Load existing remark into the text box
+    if (remarkInput) remarkInput.value = student.adminRemark || "";
+
     try {
-        console.log("Successfully passed data to modal function.");
-        activeModalStudentUid = student.prn;
-
-        const safeName = student.name || "Unknown Student";
-
-        const setEl = (id, text) => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = text;
-        };
-
-        setEl('modalInitials', safeName !== "Unknown Student" ? safeName.charAt(0).toUpperCase() : "?");
-        setEl('modalName', safeName);
-        setEl('modalEmail', student.contactNo ? `Ph: ${student.contactNo}` : "");
-        setEl('modalGR', student.prn || "--");
-        setEl('modalPhone', student.contactNo || "--");
-        setEl('modalDept', student.department || "--");
-        setEl('modalJoinYr', student.joiningYear || "--");
-        setEl('modalCurrYr', yearLabels[student.currentYear] || student.currentYear || "--");
-        setEl('modalSchType', student.scholarshipType || "--");
-        setEl('modalMahaDBT', student.mahadbtId || "Not Provided");
-
-        const tbody = document.getElementById('modalHistoryBody');
-        const statusEl = document.getElementById('modalCurrentStatus');
-        const pendingDocsEl = document.getElementById('modalPendingDocs');
-        const attemptsInfo = document.getElementById('modalAttemptsInfo');
-
-        const msgBlock = document.getElementById('adminDirectMessageBlock');
-        const fineBlock = document.getElementById('adminFineBlock');
-        const remarkInput = document.getElementById('dirAdminRemarkInput');
-
-        if (pendingDocsEl) {
-            pendingDocsEl.classList.add('hidden');
-            pendingDocsEl.innerHTML = '';
-        }
-
-        if (!student.isRegistered || !student.uid) {
-            if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">Student has not created an account yet.</td></tr>`;
-            if (statusEl) statusEl.innerHTML = `<span class="text-slate-500 font-bold">Unregistered</span>`;
-            if (attemptsInfo) attemptsInfo.innerHTML = `<span class="text-slate-400 text-lg">N/A</span>`;
-
-            if (msgBlock) msgBlock.classList.add('hidden');
-            if (fineBlock) fineBlock.classList.add('hidden');
-
-            document.getElementById('studentDetailsModal').classList.remove('hidden');
-            return;
-        }
-
-        if (msgBlock) msgBlock.classList.remove('hidden');
-        if (fineBlock) fineBlock.classList.remove('hidden');
-        if (remarkInput) remarkInput.value = student.adminRemark || "";
-
-        window.listenToStudentMessages(student.prn);
-
         const snap = await db.collection('appointments').where('uid', '==', student.uid).get();
         let apps = [];
         snap.forEach(doc => apps.push(doc.data()));
@@ -1944,31 +1929,29 @@ async function openStudentDetailsModal(student) {
             return parseTime(b.time) - parseTime(a.time);
         });
 
-        if (tbody) {
-            tbody.innerHTML = '';
-            if (apps.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">No bookings found for this student.</td></tr>`;
-            } else {
-                apps.forEach(app => {
-                    let badgeStyle = "bg-slate-100 text-slate-600";
-                    let sLabel = app.status || 'waiting';
-                    const baseS = sLabel.replace('_closed', '');
+        tbody.innerHTML = '';
+        if (apps.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">No bookings found for this student.</td></tr>`;
+        } else {
+            apps.forEach(app => {
+                let badgeStyle = "bg-slate-100 text-slate-600";
+                let sLabel = app.status || 'waiting';
+                const baseS = sLabel.replace('_closed', '');
 
-                    if (baseS === 'verified') badgeStyle = "bg-emerald-100 text-emerald-700";
-                    else if (baseS === 'pending') badgeStyle = "bg-amber-100 text-amber-700";
-                    else if (baseS === 'no_show') badgeStyle = "bg-red-100 text-red-700";
-                    else if (baseS === 'cancelled') badgeStyle = "bg-slate-100 text-slate-500 line-through";
-                    else if (baseS === 'current') badgeStyle = "bg-blue-100 text-blue-700";
+                if (baseS === 'verified') badgeStyle = "bg-emerald-100 text-emerald-700";
+                else if (baseS === 'pending') badgeStyle = "bg-amber-100 text-amber-700";
+                else if (baseS === 'no_show') badgeStyle = "bg-red-100 text-red-700";
+                else if (baseS === 'cancelled') badgeStyle = "bg-slate-100 text-slate-500 line-through";
+                else if (baseS === 'current') badgeStyle = "bg-blue-100 text-blue-700";
 
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-slate-50 transition-colors">
-                            <td class="px-4 py-3 font-medium text-slate-700">${app.date} <span class="text-xs text-slate-400 ml-1">${app.time}</span></td>
-                            <td class="px-4 py-3 font-mono text-slate-600 text-xs">${app.token}</td>
-                            <td class="px-4 py-3"><span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${badgeStyle}">${baseS}</span></td>
-                        </tr>
-                    `;
-                });
-            }
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-4 py-3 font-medium text-slate-700">${app.date} <span class="text-xs text-slate-400 ml-1">${app.time}</span></td>
+                        <td class="px-4 py-3 font-mono text-slate-600 text-xs">${app.token}</td>
+                        <td class="px-4 py-3"><span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${badgeStyle}">${baseS}</span></td>
+                    </tr>
+                `;
+            });
         }
 
         const usedAttempts = apps.length;
@@ -1976,101 +1959,238 @@ async function openStudentDetailsModal(student) {
         const limit = 3 + extraAttempts;
         const left = Math.max(0, limit - usedAttempts);
 
-        if (attemptsInfo) {
-            attemptsInfo.innerHTML = `
-                <span class="${left === 0 ? 'text-red-500' : 'text-emerald-600'}">${left} Left</span> 
-                <span class="text-sm text-slate-500 font-medium">/ ${limit} Allowed</span>
-                <span class="block text-[11px] font-bold text-slate-400 mt-1 uppercase tracking-wider">(${usedAttempts} Used, ${extraAttempts} Extra Granted)</span>
-            `;
-        }
+        attemptsInfo.innerHTML = `
+            <span class="${left === 0 ? 'text-red-500' : 'text-emerald-600'}">${left} Left</span> 
+            <span class="text-sm text-slate-500 font-medium">/ ${limit} Allowed</span>
+            <span class="block text-[11px] font-bold text-slate-400 mt-1 uppercase tracking-wider">(${usedAttempts} Used, ${extraAttempts} Extra Granted)</span>
+        `;
 
         const latestApp = apps[0];
         if (!latestApp) {
-            if (statusEl) statusEl.innerHTML = `<span class="text-slate-500">Not Booked Yet</span>`;
+            statusEl.innerHTML = `<span class="text-slate-500">Not Booked Yet</span>`;
         } else {
             const baseStatus = latestApp.status.replace('_closed', '');
             if (baseStatus === 'verified') {
-                if (statusEl) statusEl.innerHTML = `<span class="text-emerald-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> Verified</span>`;
+                statusEl.innerHTML = `<span class="text-emerald-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> Verified</span>`;
             } else if (baseStatus === 'pending') {
-                if (statusEl) statusEl.innerHTML = `<span class="text-amber-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Pending Documents</span>`;
+                statusEl.innerHTML = `<span class="text-amber-600 flex items-center gap-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Pending Documents</span>`;
 
                 const req = scholarshipDocs[student.scholarshipType] || [];
                 const ver = latestApp.documentVerification || {};
                 const missing = req.filter(d => !ver[d]);
 
-                if (missing.length > 0 && pendingDocsEl) {
+                if (missing.length > 0) {
                     pendingDocsEl.classList.remove('hidden');
                     pendingDocsEl.innerHTML = `<span class="font-bold uppercase tracking-wider text-[10px] block mb-1">Missing Documents:</span> • ${missing.join('<br> • ')}`;
                 }
             } else if (baseStatus === 'no_show') {
-                if (statusEl) statusEl.innerHTML = `<span class="text-red-600">No Show</span>`;
+                statusEl.innerHTML = `<span class="text-red-600">No Show</span>`;
             } else if (baseStatus === 'cancelled') {
-                if (statusEl) statusEl.innerHTML = `<span class="text-slate-500">Cancelled by Student</span>`;
+                statusEl.innerHTML = `<span class="text-slate-500">Cancelled by Student</span>`;
             } else {
-                if (statusEl) statusEl.innerHTML = `<span class="text-blue-600">Slot Booked / Waiting</span>`;
+                statusEl.innerHTML = `<span class="text-blue-600">Slot Booked / Waiting</span>`;
             }
         }
 
         document.getElementById('studentDetailsModal').classList.remove('hidden');
 
     } catch (e) {
-        console.error("Modal Crash: ", e);
-        showToast("Error opening profile. Please check console.");
+        showToast("Error loading student history");
     }
 }
+
 
 function closeStudentDetailsModal() {
     document.getElementById('studentDetailsModal').classList.add('hidden');
     activeModalStudentUid = null;
 }
 
-function processUnifiedAnalytics() {
+
+async function grantExtraAttempts() {
+    if (!activeModalStudentUid) return;
+
     try {
-        const appsByPRN = {};
+        const masterRef = db.collection('master_students').doc(activeModalStudentUid);
+        const doc = await masterRef.get();
+        if (!doc.exists) return;
 
-        window.rawAppsData.sort((a, b) => {
-            if (a.date !== b.date) return (b.date || "").localeCompare(a.date || "");
-            return parseTime(b.time) - parseTime(a.time);
+        const data = doc.data();
+        if (data.uid) {
+            await db.collection('users').doc(data.uid).update({
+                extraAttempts: firebase.firestore.FieldValue.increment(3)
+            });
+        }
+
+        await masterRef.update({
+            extraAttempts: firebase.firestore.FieldValue.increment(3)
         });
 
-        window.rawAppsData.forEach(app => {
-            if (!appsByPRN[app.prn] && app.status !== 'cancelled') appsByPRN[app.prn] = app;
-        });
+        showToast("Success! Account Unlocked & Attempts Granted.");
+        closeStudentDetailsModal();
+        loadStudentDirectory();
+    } catch (e) {
+        showToast("Error updating student record.");
+    }
+}
 
-        const usersByPRN = {};
-        window.rawUsersData.forEach(u => { if (u.prn) usersByPRN[u.prn] = u; });
+// --- DIRECTORY MESSAGE ENGINE ---
+async function saveDirectoryMessage() {
+    if (!activeModalStudentUid) {
+        showToast("Error: No student ID found to attach message to.");
+        return;
+    }
 
-        window.unifiedCollegeData = window.rawMasterData.map(student => {
-            const latestApp = appsByPRN[student.prn];
-            const userProfile = usersByPRN[student.prn] || {};
-            let trueStatus = "unregistered";
-            let lastActive = "--";
+    const msg = document.getElementById('dirAdminRemarkInput').value.trim();
+    const btn = document.querySelector('button[onclick="saveDirectoryMessage()"]');
 
-            if (student.isRegistered) {
-                trueStatus = "not_booked";
-                if (latestApp) {
-                    trueStatus = latestApp.status.replace('_closed', '');
-                    lastActive = `${latestApp.date} ${latestApp.time}`;
-                }
+    let originalText = "Save & Send Message";
+    if (btn) {
+        originalText = btn.innerHTML;
+        btn.innerHTML = "Saving...";
+    }
+
+    try {
+        // 1. Update Master Roster using set with merge (safer than update)
+        await db.collection('master_students').doc(activeModalStudentUid).set({ adminRemark: msg }, { merge: true });
+
+        // 2. Fetch to see if they have a live account UID attached
+        const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
+        const data = doc.data();
+
+        // 3. If they are signed up, push it to their live user profile instantly
+        if (data && data.uid) {
+            await db.collection('users').doc(data.uid).set({ adminRemark: msg }, { merge: true });
+        }
+
+        showToast(msg ? "Message Pinned to Student's Dashboard!" : "Message Recalled & Cleared.");
+
+        // Refresh the modal safely, injecting the PRN back in so the modal doesn't break
+        openStudentDetailsModal({ ...data, prn: activeModalStudentUid });
+
+    } catch (e) {
+        console.error(e);
+        showToast("Error saving message. Check console.");
+    } finally {
+        if (btn) btn.innerHTML = originalText;
+    }
+}
+window.saveDirectoryMessage = saveDirectoryMessage;
+
+window.saveDirectoryMessage = saveDirectoryMessage;
+
+// ==================== REAL-TIME ANALYTICS ENGINE ====================
+// ==================== REAL-TIME ANALYTICS ENGINE ====================
+let liveStatsUnsubscribeMaster = null;
+let liveStatsUnsubscribeApps = null;
+let liveStatsUnsubscribeUsers = null; // NEW
+let rawMasterData = [];
+let rawAppsData = [];
+let rawUsersData = []; // NEW
+window.unifiedCollegeData = [];
+
+function switchReportTab(tab) {
+    const dashBtn = document.getElementById('tabDashboardBtn');
+    const expBtn = document.getElementById('tabExportBtn');
+    const dashSec = document.getElementById('statsDashboardSection');
+    const expSec = document.getElementById('statsExportSection');
+
+    if (tab === 'dashboard') {
+        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
+        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
+        dashSec.classList.remove('hidden');
+        expSec.classList.add('hidden');
+    } else {
+        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
+        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
+        expSec.classList.remove('hidden');
+        dashSec.classList.add('hidden');
+        applyFilters(); // Re-render table
+    }
+}
+
+function startLiveAnalytics() {
+    if (liveStatsUnsubscribeMaster) liveStatsUnsubscribeMaster();
+    if (liveStatsUnsubscribeApps) liveStatsUnsubscribeApps();
+    if (liveStatsUnsubscribeUsers) liveStatsUnsubscribeUsers();
+
+    // Listen to Master Roster
+    liveStatsUnsubscribeMaster = db.collection('master_students').onSnapshot(snap => {
+        rawMasterData = [];
+        snap.forEach(doc => rawMasterData.push(doc.data()));
+        processUnifiedAnalytics();
+    });
+
+    // Listen to all Appointments
+    liveStatsUnsubscribeApps = db.collection('appointments').onSnapshot(snap => {
+        rawAppsData = [];
+        snap.forEach(doc => rawAppsData.push({ id: doc.id, ...doc.data() }));
+        processUnifiedAnalytics();
+    });
+
+    // NEW: Listen to Users to pull their actual Phone & MahaDBT IDs!
+    liveStatsUnsubscribeUsers = db.collection('users').where('role', '==', 'student').onSnapshot(snap => {
+        rawUsersData = [];
+        snap.forEach(doc => rawUsersData.push(doc.data()));
+        processUnifiedAnalytics();
+    });
+}
+
+function processUnifiedAnalytics() {
+    const appsByGR = {};
+    rawAppsData.sort((a, b) => {
+        if (a.date !== b.date) return (b.date || "").localeCompare(a.date || "");
+        return parseTime(b.time) - parseTime(a.time);
+    });
+
+    rawAppsData.forEach(app => {
+        const appId = app.prn || app.grNumber;
+        if (appId && !appsByGR[appId] && app.status !== 'cancelled') {
+            appsByGR[appId] = app;
+        }
+    });
+
+    const usersByGR = {};
+    rawUsersData.forEach(u => {
+        if (u.grNumber) usersByGR[u.grNumber] = u;
+        if (u.prn) usersByGR[u.prn] = u;
+    });
+
+    window.unifiedCollegeData = rawMasterData.map(student => {
+        // Catch the ID whether it came from Excel (grNumber) or Modal (prn)
+        const studentId = student.prn || student.grNumber || student.id;
+        const latestApp = appsByGR[studentId];
+        const userProfile = usersByGR[studentId] || {};
+
+        let trueStatus = "unregistered";
+        let lastActive = "--";
+
+        if (student.isRegistered || userProfile.uid) {
+            trueStatus = "not_booked";
+            if (latestApp) {
+                trueStatus = latestApp.status.replace('_closed', '');
+                lastActive = `${latestApp.date} ${latestApp.time}`;
             }
+        }
 
-            return {
-                ...student,
-                contactNo: userProfile.contactNo || student.contactNo || "",
-                mahadbtId: userProfile.mahadbtId || student.mahadbtId || "",
-                trueStatus: trueStatus,
-                latestApp: latestApp || null,
-                lastActive: lastActive
-            };
-        });
+        return {
+            ...student,
+            // Create unified "Safe" variables for the UI
+            safePRN: userProfile.prn || userProfile.grNumber || student.prn || student.grNumber || "N/A",
+            safeContact: userProfile.contactNo || student.contactNo || "",
+            safeMahaDBT: userProfile.mahadbtId || student.mahadbtId || "",
+            safeEmail: userProfile.email || student.email || "",
+            trueStatus: trueStatus,
+            latestApp: latestApp || null,
+            lastActive: lastActive
+        };
+    });
 
-        if (typeof renderLiveDashboard === 'function') renderLiveDashboard();
-        if (typeof applyFilters === 'function') applyFilters();
-
-    } catch (e) { console.error("Analytics Error:", e); }
+    renderLiveDashboard();
+    applyFilters();
 }
 
 function renderLiveDashboard() {
+    // 6 exact buckets
     let totals = { roster: 0, unreg: 0, notBooked: 0, booked: 0, verified: 0, pending: 0, noShow: 0 };
     let deptStats = {};
 
@@ -2079,8 +2199,10 @@ function renderLiveDashboard() {
         if (!deptStats[s.department]) {
             deptStats[s.department] = { total: 0, unreg: 0, notBooked: 0, booked: 0, verified: 0, pending: 0, noShow: 0 };
         }
+
         deptStats[s.department].total++;
 
+        // No ambiguity, map directly to trueStatus
         if (s.trueStatus === 'unregistered') { totals.unreg++; deptStats[s.department].unreg++; }
         else if (s.trueStatus === 'not_booked') { totals.notBooked++; deptStats[s.department].notBooked++; }
         else if (s.trueStatus === 'waiting' || s.trueStatus === 'current') { totals.booked++; deptStats[s.department].booked++; }
@@ -2089,6 +2211,7 @@ function renderLiveDashboard() {
         else if (s.trueStatus === 'no_show') { totals.noShow++; deptStats[s.department].noShow++; }
     });
 
+    // Update Global Cards
     if (document.getElementById('dashTotal')) {
         document.getElementById('dashTotal').textContent = totals.roster;
         document.getElementById('dashVerified').textContent = totals.verified;
@@ -2099,6 +2222,7 @@ function renderLiveDashboard() {
         document.getElementById('dashUnregistered').textContent = totals.unreg;
     }
 
+    // Render Department Grid
     const grid = document.getElementById('departmentStatsGrid');
     if (!grid) return;
     grid.innerHTML = '';
@@ -2149,23 +2273,38 @@ function renderLiveDashboard() {
     });
 }
 
-function switchReportTab(tab) {
-    const dashBtn = document.getElementById('tabDashboardBtn');
-    const expBtn = document.getElementById('tabExportBtn');
-    const dashSec = document.getElementById('statsDashboardSection');
-    const expSec = document.getElementById('statsExportSection');
+// Controls the visibility of the Custom Date Picker
+function toggleCustomDate() {
+    const timeSelect = document.getElementById('filterTime');
+    if (!timeSelect) return;
 
-    if (tab === 'dashboard') {
-        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
-        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
-        dashSec.classList.remove('hidden');
-        expSec.classList.add('hidden');
+    const fTime = timeSelect.value;
+
+    const rangeContainer = document.getElementById('customDateInputs');
+    const specificContainer = document.getElementById('specificDateInput');
+
+    const startD = document.getElementById('filterStartDate');
+    const endD = document.getElementById('filterEndDate');
+    const specificD = document.getElementById('filterSpecificDate');
+
+    if (fTime === 'CUSTOM') {
+        // Show Dual Range, Hide Single Date
+        if (rangeContainer) rangeContainer.classList.remove('hidden');
+        if (specificContainer) specificContainer.classList.add('hidden');
+        if (specificD) specificD.value = '';
+    } else if (fTime === 'SPECIFIC_DATE') {
+        // Show Single Date, Hide Dual Range
+        if (specificContainer) specificContainer.classList.remove('hidden');
+        if (rangeContainer) rangeContainer.classList.add('hidden');
+        if (startD) startD.value = '';
+        if (endD) endD.value = '';
     } else {
-        expBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all bg-violet-500 text-white shadow-md";
-        dashBtn.className = "px-6 py-2.5 rounded-lg font-semibold text-sm transition-all text-slate-400 hover:text-white";
-        expSec.classList.remove('hidden');
-        dashSec.classList.add('hidden');
-        applyFilters();
+        // Hide Both for all standard filters (Today, This Week, etc.)
+        if (rangeContainer) rangeContainer.classList.add('hidden');
+        if (specificContainer) specificContainer.classList.add('hidden');
+        if (startD) startD.value = '';
+        if (endD) endD.value = '';
+        if (specificD) specificD.value = '';
     }
 }
 
@@ -2174,12 +2313,69 @@ function applyFilters() {
     const fYear = document.getElementById('filterYear').value;
     const fStatus = document.getElementById('filterStatus').value;
 
+    const fTime = document.getElementById('filterTime') ? document.getElementById('filterTime').value : 'ALL';
+
+    const now = new Date();
+    const tYear = now.getFullYear();
+    const tMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const tDay = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${tYear}-${tMonth}-${tDay}`;
+
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
     let filtered = window.unifiedCollegeData.filter(s => {
         if (fDept !== 'ALL' && s.department !== fDept) return false;
         if (fYear !== 'ALL' && String(s.currentYear) !== String(fYear)) return false;
         if (fStatus !== 'ALL' && s.trueStatus !== fStatus) return false;
+
+        if (fTime !== 'ALL') {
+            if (!s.latestApp || !s.latestApp.date) return false;
+
+            const appDateStr = s.latestApp.date;
+
+            if (fTime === 'TODAY') {
+                if (appDateStr !== todayStr) return false;
+            }
+            else if (fTime === 'UPCOMING') {
+                if (appDateStr < todayStr) return false;
+            }
+            else if (fTime === 'THIS_MONTH') {
+                if (!appDateStr.startsWith(`${tYear}-${tMonth}`)) return false;
+            }
+            else if (fTime === 'THIS_WEEK') {
+                const appD = new Date(appDateStr);
+                if (appD < startOfWeek || appD > endOfWeek) return false;
+            }
+            else if (fTime === 'SPECIFIC_DATE') {
+                const specStr = document.getElementById('filterSpecificDate').value;
+                if (!specStr) return false;
+                if (appDateStr !== specStr) return false;
+            }
+            else if (fTime === 'CUSTOM') {
+                const startStr = document.getElementById('filterStartDate').value;
+                const endStr = document.getElementById('filterEndDate').value;
+
+                if (startStr && !endStr && appDateStr !== startStr) return false;
+                if (startStr && endStr) {
+                    if (appDateStr < startStr || appDateStr > endStr) return false;
+                }
+                if (!startStr && !endStr) return false;
+            }
+        }
+
         return true;
     });
+
+    // NEW: Instantly update the counter card!
+    const countEl = document.getElementById('filterResultCount');
+    if (countEl) {
+        countEl.textContent = filtered.length;
+    }
 
     const tbody = document.getElementById('statsTableBody');
     if (!tbody) return;
@@ -2205,7 +2401,6 @@ function applyFilters() {
             const req = scholarshipDocs[s.scholarshipType] || [];
             const ver = s.latestApp && s.latestApp.documentVerification ? s.latestApp.documentVerification : {};
             const missing = req.filter(d => !ver[d]);
-
             if (missing.length > 0) {
                 statusDetails = `<span class="text-amber-600 font-medium">Missing: ${missing.join(', ')}</span>`;
             } else {
@@ -2229,21 +2424,24 @@ function applyFilters() {
             statusDetails = `<span class="text-violet-500 font-medium">Needs to book a slot</span>`;
         }
 
-        const dbtHtml = s.mahadbtId ? `<p class="text-[10px] uppercase font-bold text-slate-400 mt-0.5">MahaDBT: <span class="text-emerald-600">${s.mahadbtId}</span></p>` : ``;
-        const phoneHtml = s.contactNo ? s.contactNo : `--`;
+        const dbtHtml = s.safeMahaDBT
+            ? `<p class="text-[10px] uppercase font-bold text-slate-400 mt-0.5">MahaDBT: <span class="text-emerald-600">${s.safeMahaDBT}</span></p>`
+            : ``;
+
+        const phoneHtml = s.safeContact ? `<span class="text-slate-700 font-semibold">${s.safeContact}</span>` : `<span class="text-slate-400 italic">No Contact</span>`;
 
         tbody.innerHTML += `
             <tr class="hover:bg-slate-50 transition-colors">
                 <td class="px-4 py-3">
-                    <p class="font-bold text-slate-800">${s.name}</p>
+                    <p class="font-bold text-slate-800">${s.name || "Unknown"}</p>
                     ${dbtHtml}
                 </td>
-                <td class="px-4 py-3 font-mono text-slate-600 font-bold">${s.prn}</td>
+                <td class="px-4 py-3 font-mono text-slate-600 font-bold">${s.safePRN}</td>
                 <td class="px-4 py-3 text-xs">
-                    <span class="font-bold text-slate-700">${s.department}</span><br>
-                    <span class="text-slate-500">${yearLabels[s.currentYear] || s.currentYear}</span>
+                    <span class="font-bold text-slate-700">${s.department || '--'}</span><br>
+                    <span class="text-slate-500">${yearLabels[s.currentYear] || s.currentYear || '--'}</span>
                 </td>
-                <td class="px-4 py-3 text-xs text-slate-500 font-medium">
+                <td class="px-4 py-3 text-xs text-slate-500">
                     ${phoneHtml}
                 </td>
                 <td class="px-4 py-3">
@@ -2256,30 +2454,29 @@ function applyFilters() {
 
     window.currentFilteredData = filtered;
 }
-
 function downloadCSV() {
     const data = window.currentFilteredData || [];
     if (data.length === 0) return showToast("No data to export!");
 
-    let csvContent = "Student Name,PRN,Department,Joining Year,Current Year,Scholarship Category,MahaDBT App ID,Contact Number,Verification Status,Remarks / Missing Documents\n";
+    // FIX: Removed "Email ID" from the CSV Headers
+    let csvContent = "Student Name,PRN Number,Department,Joining Year,Current Year,Scholarship Category,MahaDBT App ID,Contact Number,Verification Status,Remarks / Missing Documents\n";
 
     data.forEach(s => {
         const name = `"${(s.name || "").replace(/"/g, '""')}"`;
-        const prn = s.prn || "";
+        const prn = s.safePRN || "";
         const dept = s.department || "";
         const joinYr = s.joiningYear || "";
         const currYr = yearLabels[s.currentYear] ? `"${yearLabels[s.currentYear]}"` : (s.currentYear || "");
         const cat = s.scholarshipType || "";
-        const dbt = s.mahadbtId || "Not Provided";
-        const phone = s.contactNo ? `="${s.contactNo}"` : "Not Provided";
+        const dbt = s.safeMahaDBT || "Not Provided";
+
+        // Force Excel to format as text to avoid scientific notation
+        const phone = s.safeContact ? `="${s.safeContact}"` : "Not Provided";
 
         let statLabel = "Unknown";
         let details = "";
 
-        if (s.trueStatus === 'verified') {
-            statLabel = "Verified";
-            details = `Successfully verified on ${s.latestApp ? s.latestApp.date : ''}`;
-        }
+        if (s.trueStatus === 'verified') { statLabel = "Verified"; details = `Successfully verified on ${s.latestApp ? s.latestApp.date : ''}`; }
         else if (s.trueStatus === 'pending') {
             statLabel = "Pending";
             const req = scholarshipDocs[s.scholarshipType] || [];
@@ -2287,23 +2484,12 @@ function downloadCSV() {
             const missing = req.filter(d => !ver[d]);
             details = missing.length > 0 ? `Missing Documents: ${missing.join(', ')}` : "Pending document review";
         }
-        else if (s.trueStatus === 'no_show') {
-            statLabel = "No Show";
-            details = `Missed scheduled appointment on ${s.latestApp ? s.latestApp.date : ''}`;
-        }
-        else if (s.trueStatus === 'waiting' || s.trueStatus === 'current') {
-            statLabel = "Slot Booked";
-            details = `Appointment scheduled for ${s.latestApp ? s.latestApp.date + ' at ' + s.latestApp.time : ''}`;
-        }
-        else if (s.trueStatus === 'not_booked') {
-            statLabel = "Registered (No Slot)";
-            details = "Student has created an portal account but hasn't booked a verification slot";
-        }
-        else if (s.trueStatus === 'unregistered') {
-            statLabel = "Not Registered";
-            details = "Student has not signed up on the portal yet";
-        }
+        else if (s.trueStatus === 'no_show') { statLabel = "No Show"; details = `Missed scheduled appointment on ${s.latestApp ? s.latestApp.date : ''}`; }
+        else if (s.trueStatus === 'waiting' || s.trueStatus === 'current') { statLabel = "Slot Booked"; details = `Appointment scheduled for ${s.latestApp ? s.latestApp.date + ' at ' + s.latestApp.time : ''}`; }
+        else if (s.trueStatus === 'not_booked') { statLabel = "Registered (No Slot)"; details = "Student has created an portal account but hasn't booked a verification slot"; }
+        else if (s.trueStatus === 'unregistered') { statLabel = "Not Registered"; details = "Student has not signed up on the portal yet"; }
 
+        // FIX: Removed the email variable from the final string output
         csvContent += `${name},${prn},${dept},${joinYr},${currYr},${cat},${dbt},${phone},${statLabel},"${details}"\n`;
     });
 
@@ -2316,9 +2502,9 @@ function downloadCSV() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
     showToast("Official Report CSV Downloaded!");
 }
-
 function restrictDateToDepartmentDay() {
     const dateSelect = document.getElementById('slotDate');
     const dayDisplay = document.getElementById('bookingDayDisplay');
@@ -2435,6 +2621,91 @@ async function generateAvailableTimeSlots(selectedDate) {
     } catch (error) { showToast("Error checking availability."); }
 }
 
+async function bookSlot() {
+    const d = document.getElementById('slotDate').value;
+    const t = document.getElementById('slotTime').value;
+    if (!d || !t) return showToast("Pick Date and Time");
+
+    const btn = document.getElementById('bookSlotBtn');
+    const originalText = btn.textContent;
+    btn.textContent = "Booking...";
+    btn.disabled = true;
+
+    try {
+        const slotCheckSnap = await db.collection('appointments').where('date', '==', d).get();
+        let isSlotTaken = false;
+        slotCheckSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.time === t && data.status !== 'cancelled') {
+                isSlotTaken = true;
+            }
+        });
+
+        if (isSlotTaken) {
+            generateAvailableTimeSlots(d);
+            btn.textContent = originalText;
+            btn.disabled = false;
+            return showToast("Oops! Someone just booked this exact slot. Please pick another.");
+        }
+
+        const snap = await db.collection('appointments').where('uid', '==', currentUser.uid).get();
+        let pastApps = [];
+        snap.forEach(doc => pastApps.push(doc.data()));
+
+        const extraAttempts = currentUser.extraAttempts || 0;
+        // ALL statuses (including 'cancelled') now consume 1 of their 3 attempts.
+        const usedAttempts = pastApps.length;
+
+        const limit = 3 + extraAttempts;
+
+        if (usedAttempts >= limit) {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            return showToast("Booking limit exceeded! Please visit Admin.");
+        }
+
+        if (pastApps.some(app => String(app.status).includes('verified'))) {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            return showToast("You are already verified for this academic year!");
+        }
+
+        const hasActiveBooking = pastApps.some(app =>
+            ['waiting', 'current'].includes(app.status)
+        );
+
+        if (hasActiveBooking) {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            return showToast("You already have an active waiting slot!");
+        }
+
+        const correctToken = getSlotTokenNumber(t);
+        await db.collection('appointments').add({
+            uid: currentUser.uid,
+            name: currentUser.name,
+            contactNo: currentUser.contactNo,
+            joiningYear: currentUser.joiningYear,
+            currentYear: currentUser.currentYear,
+            scholarshipType: currentUser.scholarshipType,
+            prn: currentUser.prn,
+            mahadbtId: currentUser.mahadbtId,
+            department: currentUser.department,
+            date: d,
+            time: t,
+            status: 'waiting',
+            token: correctToken
+        });
+        showToast(`Slot Booked! Your Token is ${correctToken}`);
+    } catch (e) {
+        console.error("Firebase Booking Error:", e);
+        showToast("Booking Failed - Check Console");
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+}
+
 async function toggleMahadbtWindow() {
     try {
         await db.collection('settings').doc('lifecycle').set({
@@ -2455,416 +2726,9 @@ async function promptUpdateAcademicYear() {
         } catch (e) { showToast("Error updating year"); }
     }
 }
+
 window.toggleMahadbtWindow = toggleMahadbtWindow;
 window.promptUpdateAcademicYear = promptUpdateAcademicYear;
-
-window.grantExtraAttempts = async function () {
-    if (!activeModalStudentUid) return showToast("Error: No student selected.");
-
-    try {
-        const masterRef = db.collection('master_students').doc(activeModalStudentUid);
-        const doc = await masterRef.get();
-        if (!doc.exists) return showToast("Student not found in database.");
-
-        const data = doc.data();
-
-        if (data.uid) {
-            await db.collection('users').doc(data.uid).update({
-                extraAttempts: firebase.firestore.FieldValue.increment(3)
-            });
-        }
-
-        await masterRef.update({
-            extraAttempts: firebase.firestore.FieldValue.increment(3)
-        });
-
-        showToast("Success! Account Unlocked & Attempts Granted.");
-        closeStudentDetailsModal();
-        loadStudentDirectory();
-    } catch (e) {
-        console.error("Fine Unlock Error: ", e);
-        showToast("Error updating student record. Check console.");
-    }
-};
-
-window.saveDirectoryMessage = async function () {
-    if (!activeModalStudentUid) return showToast("Error: No student selected.");
-
-    const inputEl = document.getElementById('dirAdminRemarkInput');
-    if (!inputEl) return showToast("Error finding input box.");
-
-    const msg = inputEl.value.trim();
-    if (!msg) return showToast("Please type a message first.");
-
-    let btn = null;
-    let origText = "Save & Send Message";
-    try {
-        btn = document.querySelector('button[onclick*="saveDirectoryMessage"]');
-        if (btn) { origText = btn.innerHTML; btn.innerHTML = "Saving..."; btn.disabled = true; }
-    } catch (e) { }
-
-    try {
-        const timestampStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
-
-        await db.collection('student_messages').add({
-            prn: activeModalStudentUid,
-            message: msg,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            timestampString: timestampStr,
-            isRevoked: false
-        });
-
-        await db.collection('master_students').doc(activeModalStudentUid).update({
-            adminRemark: msg,
-            adminRemarkTimestamp: timestampStr
-        });
-
-        const doc = await db.collection('master_students').doc(activeModalStudentUid).get();
-        const data = doc.data();
-        if (data.uid) {
-            await db.collection('users').doc(data.uid).update({
-                adminRemark: msg,
-                adminRemarkTimestamp: timestampStr
-            });
-        }
-
-        inputEl.value = "";
-        showToast("Message Pinned & Logged!");
-    } catch (e) {
-        console.error("Direct Message Error: ", e);
-        showToast("Error saving message.");
-    } finally {
-        if (btn) { btn.innerHTML = origText; btn.disabled = false; }
-    }
-};
-
-
-window.recallStudentMessage = async function (msgId, prn) {
-    if (!confirm("Recall this direct message?\n\nIt will fade from the log and disappear from the student's dashboard.")) return;
-
-    try {
-        // Soft Delete
-        await db.collection('student_messages').doc(msgId).update({ isRevoked: true });
-
-        // Fetch remaining active messages without triggering Firebase Index Errors
-        const snap = await db.collection('student_messages')
-            .where('prn', '==', prn)
-            .where('isRevoked', '==', false)
-            .get();
-
-        // Sort them newest-to-oldest directly in the browser!
-        let msgs = [];
-        snap.forEach(doc => msgs.push(doc.data()));
-        msgs.sort((a, b) => {
-            const tA = a.createdAt ? a.createdAt.toMillis() : 0;
-            const tB = b.createdAt ? b.createdAt.toMillis() : 0;
-            return tB - tA;
-        });
-
-        let newActiveRemark = "";
-        let newActiveTimestamp = "";
-        if (msgs.length > 0) {
-            newActiveRemark = msgs[0].message;
-            newActiveTimestamp = msgs[0].timestampString || "";
-        }
-
-        await db.collection('master_students').doc(prn).update({
-            adminRemark: newActiveRemark,
-            adminRemarkTimestamp: newActiveTimestamp
-        });
-        const doc = await db.collection('master_students').doc(prn).get();
-        const data = doc.data();
-        if (data.uid) {
-            await db.collection('users').doc(data.uid).update({
-                adminRemark: newActiveRemark,
-                adminRemarkTimestamp: newActiveTimestamp
-            });
-        }
-
-        showToast("Message Recalled Successfully!");
-    } catch (e) {
-        console.error("Error recalling:", e);
-        showToast("Error recalling message.");
-    }
-};
-
-window.listenToStudentMessages = function (prn) {
-    if (window.currentMsgListener) window.currentMsgListener();
-
-    // Removed .orderBy() to bypass the strict Firebase Index requirement!
-    window.currentMsgListener = db.collection('student_messages')
-        .where('prn', '==', prn)
-        .onSnapshot(snap => {
-            const tbody = document.getElementById('studentMessageLogBody');
-            if (!tbody) return;
-
-            if (snap.empty) {
-                tbody.innerHTML = `<tr><td class="p-3 text-center text-slate-400 italic">No messages yet.</td></tr>`;
-                return;
-            }
-
-            // Pull all messages into an array
-            let msgs = [];
-            snap.forEach(doc => msgs.push({ id: doc.id, ...doc.data() }));
-
-            // Sort them newest-to-oldest right here in the Javascript
-            msgs.sort((a, b) => {
-                const timeA = a.createdAt ? a.createdAt.toMillis() : Date.now();
-                const timeB = b.createdAt ? b.createdAt.toMillis() : Date.now();
-                return timeB - timeA;
-            });
-
-            let html = '';
-            msgs.forEach(data => {
-                const isRevoked = data.isRevoked;
-
-                const textClass = isRevoked ? "text-slate-400" : "text-violet-900 font-medium";
-                const rowClass = isRevoked ? "bg-slate-50 opacity-60" : "bg-white hover:bg-violet-50 transition-colors";
-
-                const btnHtml = isRevoked
-                    ? `<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest border border-slate-200 px-1.5 py-0.5 rounded bg-slate-100">Recalled</span>`
-                    : `<button onclick="window.recallStudentMessage('${data.id}', '${prn}')" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-100 p-1.5 rounded transition-colors" title="Recall Message">
-                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                       </button>`;
-
-                html += `
-                    <tr class="${rowClass} border-b border-violet-50 last:border-0">
-                        <td class="p-3 w-1/4 text-[10px] font-bold text-slate-500 whitespace-nowrap align-top border-r border-violet-50">${data.timestampString || 'Just now'}</td>
-                        <td class="p-3 w-2/4 ${textClass} break-words align-top text-sm">${data.message}</td>
-                        <td class="p-3 w-1/4 text-right align-top border-l border-violet-50">${btnHtml}</td>
-                    </tr>
-                `;
-            });
-            tbody.innerHTML = html;
-        }, err => {
-            console.error("Log fetch error:", err);
-        });
-};
-
-
-// ==========================================
-// BROADCAST ANNOUNCEMENT ENGINE
-// ==========================================
-async function submitAnnouncement(e) {
-    e.preventDefault();
-    const btn = document.getElementById('btnSendBroadcast');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = "Publishing...";
-    btn.disabled = true;
-
-    try {
-        const payload = {
-            message: document.getElementById('announceMsg').value.trim(),
-            targetDept: document.getElementById('announceDept').value,
-            targetYear: document.getElementById('announceYear').value,
-            targetStatus: document.getElementById('announceStatus').value,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            timestampString: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }),
-            isRevoked: false
-        };
-        await db.collection('announcements').add(payload);
-        showToast("Announcement Broadcasted Successfully!");
-        document.getElementById('announcementForm').reset();
-    } catch (err) {
-        showToast("Error broadcasting announcement.");
-    } finally {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }
-}
-window.submitAnnouncement = submitAnnouncement;
-
-let pendingRecallId = null;
-
-function deleteAnnouncement(id) {
-    pendingRecallId = id;
-    const modal = document.getElementById('recallConfirmModal');
-    if (modal) modal.classList.remove('hidden');
-}
-window.deleteAnnouncement = deleteAnnouncement;
-
-function closeRecallModal() {
-    const modal = document.getElementById('recallConfirmModal');
-    if (modal) modal.classList.add('hidden');
-    pendingRecallId = null;
-}
-window.closeRecallModal = closeRecallModal;
-
-async function confirmRecallAnnouncement() {
-    if (!pendingRecallId) return;
-
-    try {
-        await db.collection('announcements').doc(pendingRecallId).update({
-            isRevoked: true
-        });
-        showToast("Announcement recalled from student dashboards.");
-        closeRecallModal();
-    } catch (e) {
-        showToast("Error recalling announcement.");
-    }
-}
-window.confirmRecallAnnouncement = confirmRecallAnnouncement;
-
-function initAdminAnnouncementListener() {
-    if (window.adminAnnounceListener) return;
-    window.adminAnnounceListener = db.collection('announcements').orderBy('createdAt', 'desc').onSnapshot(snap => {
-        const tbody = document.getElementById('adminAnnouncementsLog');
-        if (!tbody) return;
-
-        tbody.innerHTML = '';
-        if (snap.empty) {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center py-10 text-slate-400 italic">No past announcements.</td></tr>`;
-            return;
-        }
-
-        snap.forEach(doc => {
-            const data = doc.data();
-            const isRevoked = data.isRevoked === true;
-
-            const tagClass = "inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest mr-1 mb-1 shadow-sm border";
-            let filtersHTML = "";
-            filtersHTML += `<span class="${tagClass} ${data.targetDept === 'ALL' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-100 text-blue-700 border-blue-200'}">DEPT: ${data.targetDept}</span>`;
-            filtersHTML += `<span class="${tagClass} ${data.targetYear === 'ALL' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'}">YR: ${data.targetYear}</span>`;
-            filtersHTML += `<span class="${tagClass} ${data.targetStatus === 'ALL' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-amber-100 text-amber-700 border-amber-200'}">STATUS: ${data.targetStatus}</span>`;
-
-            const rowClass = isRevoked ? "bg-slate-50 opacity-60" : "bg-white hover:bg-slate-50 transition-colors";
-            const textClass = isRevoked ? "text-slate-500" : "text-slate-800";
-
-            let actionBtn = isRevoked
-                ? `<span class="px-2 py-1 bg-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-widest rounded">Recalled</span>`
-                : `<button onclick="window.deleteAnnouncement('${doc.id}')" class="p-1.5 bg-red-50 text-red-500 hover:bg-red-100 rounded-md transition-colors" title="Recall Broadcast">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                   </button>`;
-
-            tbody.innerHTML += `
-                <tr class="${rowClass}">
-                    <td class="px-6 py-4 font-bold text-slate-500 text-xs whitespace-nowrap">${data.timestampString || 'Just now'}</td>
-                    <td class="px-6 py-4 ${textClass} font-medium">${data.message}</td>
-                    <td class="px-6 py-4">${filtersHTML}</td>
-                    <td class="px-6 py-4">${actionBtn}</td>
-                </tr>
-            `;
-        });
-    });
-}
-
-// ==========================================
-// UNIFIED CUSTOM MODAL ENGINE (Overrides Ugly Browser Popups)
-// ==========================================
-
-// Create fresh global variables to avoid conflicts with older code
-window.sharedRecallId = null;
-window.sharedRecallType = null;
-window.sharedRecallPrn = null;
-
-// 1. Override the Direct Message Delete click
-window.recallStudentMessage = function (msgId, prn) {
-    window.sharedRecallId = msgId;
-    window.sharedRecallPrn = prn;
-    window.sharedRecallType = 'message'; // Tag it as a direct message
-    const modal = document.getElementById('recallConfirmModal');
-    if (modal) modal.classList.remove('hidden');
-};
-
-// 2. Override the Global Announcement Delete click
-window.deleteAnnouncement = function (id) {
-    window.sharedRecallId = id;
-    window.sharedRecallType = 'announcement'; // Tag it as a global broadcast
-    const modal = document.getElementById('recallConfirmModal');
-    if (modal) modal.classList.remove('hidden');
-};
-
-// 3. Override the "Cancel" button inside the modal
-window.closeRecallModal = function () {
-    const modal = document.getElementById('recallConfirmModal');
-    if (modal) modal.classList.add('hidden');
-    window.sharedRecallId = null;
-    window.sharedRecallType = null;
-    window.sharedRecallPrn = null;
-};
-
-// 4. Override the "Recall It" confirm button inside the modal to handle BOTH types dynamically!
-window.confirmRecallAnnouncement = async function () {
-    if (!window.sharedRecallId) return;
-
-    // Grab the button to show the loading animation
-    const btn = document.querySelector('#recallConfirmModal button.bg-red-500');
-    const origText = btn ? btn.textContent : "Recall It";
-    if (btn) btn.textContent = "Recalling...";
-
-    try {
-        if (window.sharedRecallType === 'announcement') {
-            // Handle Global Announcement Recall
-            await db.collection('announcements').doc(window.sharedRecallId).update({ isRevoked: true });
-            showToast("Announcement recalled from student dashboards.");
-        }
-        else if (window.sharedRecallType === 'message') {
-            // Handle Direct Student Message Recall
-            await db.collection('student_messages').doc(window.sharedRecallId).update({ isRevoked: true });
-
-            // Fetch the remaining active messages to rollback the student's dashboard
-            const snap = await db.collection('student_messages')
-                .where('prn', '==', window.sharedRecallPrn)
-                .where('isRevoked', '==', false)
-                .get();
-
-            let msgs = [];
-            snap.forEach(doc => msgs.push(doc.data()));
-            msgs.sort((a, b) => {
-                const tA = a.createdAt ? a.createdAt.toMillis() : 0;
-                const tB = b.createdAt ? b.createdAt.toMillis() : 0;
-                return tB - tA;
-            });
-
-            let newActiveRemark = "";
-            let newActiveTimestamp = "";
-            if (msgs.length > 0) {
-                newActiveRemark = msgs[0].message;
-                newActiveTimestamp = msgs[0].timestampString || "";
-            }
-
-            // Sync the rollback to the database
-            await db.collection('master_students').doc(window.sharedRecallPrn).update({
-                adminRemark: newActiveRemark,
-                adminRemarkTimestamp: newActiveTimestamp
-            });
-            const doc = await db.collection('master_students').doc(window.sharedRecallPrn).get();
-            if (doc.exists && doc.data().uid) {
-                await db.collection('users').doc(doc.data().uid).update({
-                    adminRemark: newActiveRemark,
-                    adminRemarkTimestamp: newActiveTimestamp
-                });
-            }
-            showToast("Message Recalled Successfully!");
-        }
-
-        window.closeRecallModal(); // Hide the modal when done
-
-    } catch (e) {
-        console.error("Error recalling:", e);
-        showToast("Error recalling item.");
-    } finally {
-        if (btn) btn.textContent = origText; // Reset the button text
-    }
-};
-// Make sure the academic year update function is properly exposed
-window.promptUpdateAcademicYear = async function() {
-    const newYear = prompt("Enter new Academic Year (e.g., 2026-2027):", window.systemAcademicYear);
-    if (newYear && newYear.trim() !== "") {
-        try {
-            await db.collection('settings').doc('lifecycle').set({
-                academicYear: newYear.trim()
-            }, { merge: true });
-            showToast("Academic Year Updated to " + newYear);
-            // Refresh the display
-            const yearDisplay = document.getElementById('adminSystemYearDisplay');
-            if (yearDisplay) yearDisplay.textContent = newYear.trim();
-        } catch (e) { 
-            console.error("Error updating year:", e);
-            showToast("Error updating year"); 
-        }
-    }
-};
 
 // ==================== WINDOW EXPORTS ====================
 window.setUserType = setUserType;
@@ -2900,9 +2764,12 @@ window.toggleEditProfile = () => {
         inputArea.classList.add('hidden');
         lockedArea.classList.remove('hidden');
         saveBtn.classList.add('hidden');
+
+        // Explicitly show the year it belongs to!
         const displayYear = currentUser.mahadbtYear || window.systemAcademicYear || "2025-2026";
         document.getElementById('lockedYearDisplay').textContent = displayYear;
     }
+
     modal.classList.remove('hidden');
 };
 
@@ -2925,6 +2792,7 @@ window.saveProfileUpdate = async () => {
     showToast(`MahaDBT ID Updated for ${window.systemAcademicYear}`);
 };
 
+
 window.toggleLiveQueue = () => document.getElementById('liveQueueSection').classList.toggle('hidden');
 window.closeUpdateModal = () => document.getElementById('updateProfileModal').classList.add('hidden');
 window.updateActiveStatus = updateActiveStatus;
@@ -2941,11 +2809,16 @@ window.toggleNotifications = toggleNotifications;
 window.openCancelModal = openCancelModal;
 window.closeCancelModal = closeCancelModal;
 window.confirmCancelBooking = confirmCancelBooking;
+
 window.closeEditStudentModal = closeEditStudentModal;
 window.submitEditStudent = submitEditStudent;
+
 window.openActionConfirmModal = openActionConfirmModal;
 window.closeActionConfirmModal = closeActionConfirmModal;
 window.executeConfirmedAction = executeConfirmedAction;
+
+window.toggleCustomDate = toggleCustomDate;
+
 window.openRemarkConfirmModal = openRemarkConfirmModal;
 window.closeRemarkConfirmModal = closeRemarkConfirmModal;
 window.confirmAndSaveRemark = confirmAndSaveRemark;

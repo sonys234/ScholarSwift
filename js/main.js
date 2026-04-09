@@ -2,7 +2,8 @@
  * ScholarSwift Main Application Logic
  * Smart Queue Management System
  */
-
+// ==================== DEVELOPMENT SETTINGS ====================
+const IS_TEST_MODE = false;// CHANGE TO 'false' BEFORE PRODUCING FOR STUDENTS
 // ==================== CONFIG & STATE ====================
 let isTimerRunning = false;
 let isQueuePaused = false;
@@ -174,7 +175,13 @@ function getMasterDelay() {
 }
 
 // ==================== INITIALIZATION ====================
+// ==================== INITIALIZATION ====================
+let isAppInitialized = false;
+
 function initApp() {
+    if (isAppInitialized) return; // Prevent double-firing
+    isAppInitialized = true;
+
     startLiveClock();
     setMinDate();
     listenToQueueSettings();
@@ -462,6 +469,10 @@ function setUserType(type) {
     const authTabs = document.getElementById('authTabs');
     const authTitle = document.getElementById('authTitle');
 
+    // NEW: Grab the label and input to change dynamically
+    const idLabel = document.getElementById('loginIdLabel');
+    const idInput = document.getElementById('prnInput');
+
     if (type === 'student') {
         studentToggle.classList.add('bg-emerald-500', 'text-white');
         studentToggle.classList.remove('text-slate-400');
@@ -470,6 +481,14 @@ function setUserType(type) {
         adminToggle.classList.remove('bg-violet-500', 'text-white');
         adminToggle.classList.add('text-slate-400', 'hover:text-white');
         if (signupTab) signupTab.classList.remove('hidden');
+
+        // Revert to Student PRN UI
+        if (idLabel) idLabel.textContent = "PRN Number";
+        if (idInput) {
+            idInput.placeholder = "16-digit PRN";
+            idInput.type = "text";
+        }
+
     } else {
         adminToggle.classList.add('bg-violet-500', 'text-white');
         adminToggle.classList.remove('text-slate-400');
@@ -478,6 +497,14 @@ function setUserType(type) {
         studentToggle.classList.remove('bg-emerald-500', 'text-white');
         studentToggle.classList.add('text-slate-400', 'hover:text-white');
         if (signupTab) signupTab.classList.add('hidden');
+
+        // Switch to Admin Email UI
+        if (idLabel) idLabel.textContent = "Admin Email";
+        if (idInput) {
+            idInput.placeholder = "admin@scholarswift.com";
+            idInput.type = "email";
+        }
+
         setAuthMode('login');
     }
 }
@@ -529,120 +556,120 @@ async function handleAuth(event) {
     event.preventDefault();
 
     const prnInput = document.getElementById('prnInput');
-    const prn = prnInput.value.toUpperCase().trim();
-
     const passwordInput = document.getElementById('passwordInput');
-    const password = passwordInput.value;
     const errorDiv = document.getElementById('authError');
+    const submitBtn = document.getElementById('authSubmit');
+
     errorDiv.classList.add('hidden');
 
-    const dummyAuthEmail = `${prn}@scholarswift.local`;
+    const rawInput = prnInput.value.trim();
+    if (!rawInput) return;
+
+    const prn = rawInput.toUpperCase(); // PRN for database lookups
+    const password = passwordInput.value;
 
     try {
         if (currentUserType === 'student') {
             if (authMode === 'signup') {
-                const contactNo = document.getElementById('contactInput') ? document.getElementById('contactInput').value.trim() : "";
-                const mahadbtId = document.getElementById('mahadbtIdInput') ? document.getElementById('mahadbtIdInput').value.trim() : "";
-
-                // --- SIGN-UP STEP 1: VERIFY DATA ---
-                if (window.currentSignupStep === 1 || !window.currentSignupStep) {
-                    if (!prn) throw new Error("16-digit PRN is required to verify!");
-
+                // --- SIGN-UP LOGIC (UNCHANGED) ---
+                if (!window.currentSignupStep || window.currentSignupStep === 1) {
+                    submitBtn.textContent = "Verifying...";
                     const masterDoc = await db.collection('master_students').doc(prn).get();
-                    if (!masterDoc.exists) {
-                        throw new Error("PRN not found in official roster. Contact Admin.");
-                    }
-
+                    if (!masterDoc.exists) throw new Error("PRN not found in official roster.");
                     const masterData = masterDoc.data();
-                    if (masterData.isRegistered) {
-                        throw new Error("An account with this PRN already exists. Please Sign In.");
-                    }
+                    if (masterData.isRegistered) throw new Error("This PRN is already registered.");
 
-                    // Success! Show Step 2
                     document.getElementById('fetchedName').textContent = masterData.name;
                     document.getElementById('fetchedDept').textContent = masterData.department;
-                    document.getElementById('fetchedYear').textContent = yearLabels[masterData.currentYear] || `Year ${masterData.currentYear}`;
+                    document.getElementById('fetchedYear').textContent = yearLabels[masterData.currentYear];
                     document.getElementById('fetchedCategory').textContent = masterData.scholarshipType;
 
                     document.getElementById('fetchedDetailsBlock').classList.remove('hidden');
                     document.getElementById('passwordBlock').classList.remove('hidden');
-                    passwordInput.required = true;
-
+                    document.getElementById('signupExtraFields').classList.remove('hidden');
                     prnInput.readOnly = true;
-                    prnInput.classList.add('opacity-70', 'bg-slate-50');
-
-                    document.getElementById('authSubmit').textContent = 'Confirm & Create Account';
+                    submitBtn.textContent = 'Confirm & Create Account';
                     window.currentSignupStep = 2;
                     window.verifiedMasterData = masterData;
-
                     return;
                 }
-                // --- SIGN-UP STEP 2: CREATE ACCOUNT ---
                 else if (window.currentSignupStep === 2) {
-                    if (!mahadbtId || !password) throw new Error("Password and MahaDBT ID are required to complete sign up!");
-
+                    const signupEmail = `${prn}@scholarswift.local`.toLowerCase();
+                    const userCredential = await auth.createUserWithEmailAndPassword(signupEmail, password);
                     const masterData = window.verifiedMasterData;
-                    const userCredential = await auth.createUserWithEmailAndPassword(dummyAuthEmail, password);
-
                     const studentData = {
-                        uid: userCredential.user.uid,
-                        prn: prn,
-                        contactNo: contactNo,
-                        mahadbtId: mahadbtId,
-                        firstName: masterData.firstName,
-                        lastName: masterData.lastName,
-                        name: masterData.name,
-                        department: masterData.department,
-                        joiningYear: masterData.joiningYear,
-                        currentYear: masterData.currentYear,
-                        scholarshipType: masterData.scholarshipType,
-                        role: 'student',
-                        extraAttempts: 0,
-                        adminRemark: masterData.adminRemark || "",
-                        scholarId: `${masterData.department}${Math.floor(100 + Math.random() * 900)}`
+                        uid: userCredential.user.uid, prn: prn,
+                        contactNo: document.getElementById('contactInput').value,
+                        mahadbtId: document.getElementById('mahadbtIdInput').value,
+                        name: masterData.name, department: masterData.department,
+                        currentYear: masterData.currentYear, scholarshipType: masterData.scholarshipType,
+                        role: 'student', extraAttempts: 0
                     };
-
                     await db.collection('users').doc(userCredential.user.uid).set(studentData);
                     await db.collection('master_students').doc(prn).update({ isRegistered: true, uid: userCredential.user.uid });
-
                     currentUser = { ...studentData, type: 'student' };
                     window.currentSignupStep = 1;
-                    showToast(`Success! Account created for ${masterData.name}`);
                     showStudentDashboard();
                 }
             } else {
-                const userCredential = await auth.signInWithEmailAndPassword(dummyAuthEmail, password);
+                // --- HYBRID LOGIN FLOW (THE FIX) ---
+                if (!prn || !password) throw new Error("Please enter your PRN and Password");
+
+                const emailLower = `${prn}@scholarswift.local`.toLowerCase();
+                const emailLegacy = `${prn}@scholarswift.local`; // Original Uppercase/Mixed format
+
+                let userCredential;
+
+                try {
+                    // 1. Try the new Lowercase standard
+                    userCredential = await auth.signInWithEmailAndPassword(emailLower, password);
+                } catch (err) {
+                    // 2. If it fails, try the Legacy (Case-Sensitive) format
+                    try {
+                        userCredential = await auth.signInWithEmailAndPassword(emailLegacy, password);
+                    } catch (legacyErr) {
+                        // 3. If both fail, the password or PRN is actually wrong
+                        throw new Error("Incorrect PRN or Password.");
+                    }
+                }
+
                 const doc = await db.collection('users').doc(userCredential.user.uid).get();
                 if (doc.exists) {
                     currentUser = { ...doc.data(), uid: userCredential.user.uid, type: 'student' };
                     showStudentDashboard();
-                } else throw new Error("Profile not found!");
+                } else {
+                    throw new Error("User profile not found.");
+                }
             }
         } else {
-            const adminInput = prn.toLowerCase();
-            const ADMIN_EMAIL = "admin@scholarswift.com";
-            const ADMIN_PASS = "admin123";
-
-            if (adminInput === ADMIN_EMAIL && password === ADMIN_PASS) {
-                currentUser = { name: 'System Admin', role: 'Head', dept: 'Verification Cell', type: 'admin', uid: 'admin_fixed_id' };
+            // Admin Login
+            if (rawInput.toLowerCase() === "admin@scholarswift.com" && password === "admin123") {
+                currentUser = { name: 'System Admin', type: 'admin', uid: 'admin_fixed' };
                 showAdminDashboard();
-                showToast("Welcome Admin");
-            } else {
-                throw new Error("Invalid Admin credentials!");
-            }
+            } else throw new Error("Invalid Admin credentials.");
         }
     } catch (e) {
         errorDiv.textContent = e.message;
         errorDiv.classList.remove('hidden');
+        submitBtn.disabled = false;
     }
 }
 
 // ==================== STUDENT DASHBOARD & UI UPDATES ====================
+
 function showStudentDashboard() {
     if (!currentUser) return;
     document.getElementById('authPage').classList.add('hidden');
     document.getElementById('studentDashboard').classList.remove('hidden');
     listenToStudentBroadcasts();
+
+    // FORCE UNLOCK: Make sure the Update Info button is always visible and clickable
+    // We target common button IDs/attributes used for the edit modal
+    const editButton = document.getElementById('studentUpdateInfoBtn') || document.querySelector('[onclick*="Update"]');
+    if (editButton) {
+        editButton.classList.remove('hidden', 'cursor-not-allowed', 'opacity-50');
+        editButton.disabled = false;
+    }
 
     const displayYear = currentUser.mahadbtYear || window.systemAcademicYear || "2025-2026";
 
@@ -703,6 +730,7 @@ function showStudentDashboard() {
             if (remarksBlock) remarksBlock.classList.add('hidden');
         }
     }
+
     // NEW: Real-time listener for the User Profile (Catches live Admin Remarks & Extra Attempts instantly)
     if (!window.userProfileListener) {
         window.userProfileListener = db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
@@ -937,6 +965,8 @@ function showStudentDashboard() {
             }
         });
 }
+
+
 function openCancelModal() {
     document.getElementById('cancelConfirmModal').classList.remove('hidden');
 }
@@ -1379,55 +1409,83 @@ async function resetQueueDelay() {
 async function updateActiveStatus(newStatus) {
     try {
         const snap = await db.collection('appointments').where('status', '==', 'current').limit(1).get();
-        if (snap.empty) return showToast("No active student.");
+        if (snap.empty) return showToast("No active student found at desk.");
 
         const docRef = snap.docs[0];
         const data = docRef.data();
+        const appointmentId = docRef.id;
 
+        // --- CRITICAL SAFETY PRECAUTION FOR VERIFICATION ---
         if (newStatus === 'verified') {
             const requiredDocs = scholarshipDocs[data.scholarshipType] || [];
-            const verifiedDocs = data.documentVerification || {};
-            const pendingDocs = requiredDocs.filter(docName => !verifiedDocs[docName]);
+            const verifiedMap = data.documentVerification || {};
 
-            if (pendingDocs.length > 0) {
-                showToast(`Cannot Verify: ${pendingDocs.length} documents pending.`);
-                return;
+            // Filter docs where the checkbox is either missing OR explicitly set to false
+            const missingDocs = requiredDocs.filter(docName => verifiedMap[docName] !== true);
+
+            if (missingDocs.length > 0) {
+                // Play a warning sound or show a specific alert if you prefer, 
+                // but a clear Toast is best for consistency.
+                showToast(`⚠️ BLOCK: ${missingDocs.length} documents are not yet checked!`);
+
+                // Optional: Console log for admin debugging
+                console.warn("Verification blocked. Missing docs:", missingDocs);
+                return; // Hard stop - do not proceed to update database
             }
         }
 
-        // NEW: Capture Admin Remarks before updating the database
+        // Capture Admin Remarks
         const remarksInput = document.getElementById('adminRemarksInput');
         const remarkText = remarksInput ? remarksInput.value.trim() : "";
 
-        await db.collection('appointments').doc(docRef.id).update({
+        // Update the appointment document
+        await db.collection('appointments').doc(appointmentId).update({
             status: newStatus,
             processedAt: new Date().toISOString(),
-            remarks: remarkText // Save the remark to the student's appointment record
+            remarks: remarkText
         });
 
+        // --- DELAY RECOVERY LOGIC ---
         let recoveredMins = 0;
         if (globalDelayMinutes > 0 && remainingSeconds > 0) {
             const timeSaved = Math.floor(remainingSeconds / 60);
             if (timeSaved > 0) {
                 recoveredMins = Math.min(globalDelayMinutes, timeSaved);
                 const newDelay = globalDelayMinutes - recoveredMins;
-                await db.collection('settings').doc('queueStatus').set({ delayMinutes: newDelay }, { merge: true });
+                await db.collection('settings').doc('queueStatus').set({
+                    delayMinutes: newDelay
+                }, { merge: true });
             }
         }
 
+        // Reset the desk timer
         if (sessionCountdown) {
             clearInterval(sessionCountdown);
             sessionCountdown = null;
         }
         isTimerRunning = false;
 
-        if (recoveredMins > 0) {
-            showToast(`Marked ${newStatus.toUpperCase()}! Queue caught up by ${recoveredMins} mins ⏱️`);
+        // Final UI Feedback
+        if (newStatus === 'verified') {
+            showToast(`✅ Student Verified Successfully!`);
+        } else if (newStatus === 'pending') {
+            showToast(`🟠 Status set to Documents Pending`);
         } else {
-            showToast(`Student set to ${newStatus.toUpperCase()}`);
+            showToast(`Status updated to ${newStatus.toUpperCase()}`);
         }
 
-    } catch (e) { showToast("System error."); }
+        if (recoveredMins > 0) {
+            setTimeout(() => {
+                showToast(`⏱️ Efficiency Bonus: Queue caught up by ${recoveredMins} mins!`);
+            }, 1000);
+        }
+
+        // The real-time listener will handle refreshing the dossier UI automatically.
+
+    } catch (e) {
+        console.error("Status Update Error:", e);
+        showToast("System error: Could not update status.");
+    }
 }
 
 async function updateDocumentStatus(id, doc, stat) {
@@ -1699,16 +1757,14 @@ async function enableAdminEditMode() {
         document.getElementById('editJoinYear').value = data.joiningYear || '';
         document.getElementById('editCurrYear').value = data.currentYear || '';
         document.getElementById('editSchType').value = data.scholarshipType || '';
-        document.getElementById('editEmail').value = data.email || '';
+
+        // Removed the broken editEmail reference that was crashing the modal!
 
         document.getElementById('editStudentModal').classList.remove('hidden');
     } catch (error) {
+        console.error("Edit Mode Error:", error);
         showToast("Error fetching student details.");
     }
-}
-
-function closeEditStudentModal() {
-    document.getElementById('editStudentModal').classList.add('hidden');
 }
 
 async function submitEditStudent(e) {
@@ -1721,7 +1777,8 @@ async function submitEditStudent(e) {
     const joiningYear = document.getElementById('editJoinYear').value;
     const currentYear = document.getElementById('editCurrYear').value;
     const scholarshipType = document.getElementById('editSchType').value;
-    const email = document.getElementById('editEmail').value.toLowerCase().trim();
+
+    // Removed the broken email lookup here too!
 
     const updatedData = {
         firstName,
@@ -1730,8 +1787,7 @@ async function submitEditStudent(e) {
         department,
         joiningYear,
         currentYear,
-        scholarshipType,
-        email
+        scholarshipType
     };
 
     try {
@@ -1745,19 +1801,28 @@ async function submitEditStudent(e) {
         showToast("Student details updated successfully!");
         closeEditStudentModal();
 
+        // Instantly update the parent modal's UI
         document.getElementById('modalName').textContent = updatedData.name;
-        document.getElementById('modalEmail').textContent = updatedData.email;
         document.getElementById('modalDept').textContent = updatedData.department;
         document.getElementById('modalJoinYr').textContent = updatedData.joiningYear;
         document.getElementById('modalCurrYr').textContent = yearLabels[updatedData.currentYear] || updatedData.currentYear;
         document.getElementById('modalSchType').textContent = updatedData.scholarshipType;
         document.getElementById('modalInitials').textContent = updatedData.firstName.charAt(0).toUpperCase();
 
+        // We also removed the modalEmail update here to match our earlier cleanup!
+
         loadStudentDirectory();
     } catch (err) {
+        console.error("Update Student Error:", err);
         showToast("Error updating student.");
     }
 }
+
+function closeEditStudentModal() {
+    document.getElementById('editStudentModal').classList.add('hidden');
+}
+
+
 
 async function loadStudentDirectory() {
     try {
@@ -2702,7 +2767,8 @@ function restrictDateToDepartmentDay() {
         safetyCounter++;
         if (checkDate.getDay() === deptInfo.day) {
             const isToday = checkDate.toDateString() === today.toDateString();
-            if (!isToday || currentHour < 23) {
+            // In Test Mode, we allow picking today even if the hour is late or early
+            if (IS_TEST_MODE || !isToday || currentHour < 23) {
                 const dateString = checkDate.toISOString().split('T')[0];
                 const readableDate = checkDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
                 const option = document.createElement('option');
@@ -2724,7 +2790,8 @@ function restrictDateToDepartmentDay() {
         openingTime.setDate(selectedDate.getDate() - 1);
         openingTime.setHours(9, 0, 0, 0);
 
-        if (new Date() < openingTime) {
+        // TEST MODE BYPASS: Ignore the 9:00 AM opening restriction
+        if (!IS_TEST_MODE && new Date() < openingTime) {
             const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
             showToast(`Booking opens ${days[openingTime.getDay()]} at 9:00 AM.`);
             dateSelect.value = "";
@@ -2739,12 +2806,26 @@ function restrictDateToDepartmentDay() {
 async function generateAvailableTimeSlots(selectedDate) {
     const select = document.getElementById('slotTime');
     if (!select) return;
+
+    // Safety check: Calculate if this date is more than 24 hours away
+    const now = new Date();
+    const targetDate = new Date(selectedDate);
+    targetDate.setHours(9, 30, 0, 0); // Start of booking day
+
+    const diffInHours = (targetDate - now) / (1000 * 60 * 60);
+
+    // FIX: If it's too early, clear the dropdown and stop
+    if (!IS_TEST_MODE && diffInHours > 24) {
+        select.innerHTML = '<option value="">Booking opens 24h prior</option>';
+        showToast("Slots for this date open exactly 24 hours before the start time.");
+        return;
+    }
+
     select.innerHTML = '<option value="">Checking availability...</option>';
 
     try {
         const snapshot = await db.collection('appointments').where('date', '==', selectedDate).get();
         const bookedTimes = [];
-
         snapshot.forEach(doc => {
             if (doc.data().status !== 'cancelled') {
                 bookedTimes.push(doc.data().time);
@@ -2754,24 +2835,19 @@ async function generateAvailableTimeSlots(selectedDate) {
         select.innerHTML = '<option value="">Select a 7-min slot</option>';
         let time = new Date();
         time.setHours(9, 30, 0, 0);
-        const bookingEnd = 23;
-        let safetyCounter = 0;
+        const bookingEnd = 17; // 5:00 PM
 
-        const now = new Date();
-        const [selYear, selMonth, selDay] = selectedDate.split('-').map(Number);
-
-        while (time.getHours() < bookingEnd && safetyCounter < 200) {
-            safetyCounter++;
+        while (time.getHours() < bookingEnd) {
             if (time.getHours() === 13) { time.setHours(14, 0, 0, 0); continue; }
-            const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-            let endTime = new Date(time);
-            endTime.setMinutes(endTime.getMinutes() + 7);
-            if (endTime.getHours() >= bookingEnd && endTime.getMinutes() > 0) break;
 
-            const slotDateTime = new Date(selYear, selMonth - 1, selDay, time.getHours(), time.getMinutes(), 0, 0);
+            const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+            // Generate full date-time for this specific slot to check if it passed
+            const [selYear, selMonth, selDay] = selectedDate.split('-').map(Number);
+            const slotDateTime = new Date(selYear, selMonth - 1, selDay, time.getHours(), time.getMinutes());
 
             const isBooked = bookedTimes.includes(timeStr);
-            const isPast = slotDateTime < now;
+            const isPast = IS_TEST_MODE ? false : (slotDateTime < now);
 
             const option = document.createElement('option');
             option.value = timeStr;
@@ -2779,18 +2855,20 @@ async function generateAvailableTimeSlots(selectedDate) {
             if (isBooked) {
                 option.textContent = `${timeStr} (BOOKED)`;
                 option.disabled = true;
-                option.className = "text-slate-300 bg-slate-50 italic";
+                option.className = "text-slate-300 italic";
             } else if (isPast) {
                 option.textContent = `${timeStr} (PASSED)`;
                 option.disabled = true;
-                option.className = "text-slate-300 bg-slate-50 italic opacity-60";
+                option.className = "text-slate-300 opacity-60";
             } else {
                 option.textContent = timeStr;
             }
             select.appendChild(option);
             time.setMinutes(time.getMinutes() + 7);
         }
-    } catch (error) { showToast("Error checking availability."); }
+    } catch (error) {
+        showToast("Error checking availability.");
+    }
 }
 
 async function bookSlot() {
@@ -2798,12 +2876,23 @@ async function bookSlot() {
     const t = document.getElementById('slotTime').value;
     if (!d || !t) return showToast("Pick Date and Time");
 
+    // NEW: 24-Hour Check Logic
+    const selectedDateTime = new Date(`${d}T${t}`); // Standardize format for JS Date
+    const now = new Date();
+    const hoursUntilSlot = (selectedDateTime - now) / (1000 * 60 * 60);
+
+    // If it's a future date (like Apr 16) and IS_TEST_MODE is off, prevent early booking
+    if (!IS_TEST_MODE && hoursUntilSlot > 24) {
+        return showToast("Booking only opens 24 hours before the slot!");
+    }
+
     const btn = document.getElementById('bookSlotBtn');
     const originalText = btn.textContent;
     btn.textContent = "Booking...";
     btn.disabled = true;
 
     try {
+        // 1. Check for double-booking
         const slotCheckSnap = await db.collection('appointments').where('date', '==', d).get();
         let isSlotTaken = false;
         slotCheckSnap.forEach(doc => {
@@ -2817,61 +2906,68 @@ async function bookSlot() {
             generateAvailableTimeSlots(d);
             btn.textContent = originalText;
             btn.disabled = false;
-            return showToast("Oops! Someone just booked this exact slot. Please pick another.");
+            return showToast("Oops! This slot was just taken. Please pick another.");
         }
 
+        // 2. Check limits and existing active bookings
         const snap = await db.collection('appointments').where('uid', '==', currentUser.uid).get();
         let pastApps = [];
         snap.forEach(doc => pastApps.push(doc.data()));
 
         const extraAttempts = currentUser.extraAttempts || 0;
-        // ALL statuses (including 'cancelled') now consume 1 of their 3 attempts.
         const usedAttempts = pastApps.length;
-
         const limit = 3 + extraAttempts;
 
         if (usedAttempts >= limit) {
             btn.textContent = originalText;
             btn.disabled = false;
-            return showToast("Booking limit exceeded! Please visit Admin.");
+            return showToast("Attempt limit reached. Please see Admin.");
         }
 
         if (pastApps.some(app => String(app.status).includes('verified'))) {
             btn.textContent = originalText;
             btn.disabled = false;
-            return showToast("You are already verified for this academic year!");
+            return showToast("You are already verified!");
         }
 
-        const hasActiveBooking = pastApps.some(app =>
-            ['waiting', 'current'].includes(app.status)
-        );
-
+        const hasActiveBooking = pastApps.some(app => ['waiting', 'current'].includes(app.status));
         if (hasActiveBooking) {
             btn.textContent = originalText;
             btn.disabled = false;
-            return showToast("You already have an active waiting slot!");
+            return showToast("You already have an active slot!");
         }
 
+        // 3. FINAL SAFETY CHECK: Handle 'undefined' values before adding to Firebase
         const correctToken = getSlotTokenNumber(t);
-        await db.collection('appointments').add({
-            uid: currentUser.uid,
-            name: currentUser.name,
-            contactNo: currentUser.contactNo,
-            joiningYear: currentUser.joiningYear,
-            currentYear: currentUser.currentYear,
-            scholarshipType: currentUser.scholarshipType,
-            prn: currentUser.prn,
-            mahadbtId: currentUser.mahadbtId,
-            department: currentUser.department,
+
+        // Define safe variables with fallbacks
+        const bookingPayload = {
+            uid: currentUser.uid || "N/A",
+            name: currentUser.name || "Unknown Student",
+            contactNo: currentUser.contactNo || "--",
+            joiningYear: currentUser.joiningYear || currentUser.joinYear || "2022", // Check both variations
+            currentYear: currentUser.currentYear || "1",
+            scholarshipType: currentUser.scholarshipType || "General",
+            prn: currentUser.prn || "N/A",
+            mahadbtId: currentUser.mahadbtId || "NOT_PROVIDED",
+            department: currentUser.department || "GEN",
             date: d,
             time: t,
             status: 'waiting',
-            token: correctToken
-        });
+            token: correctToken,
+            bookedAt: new Date().toISOString()
+        };
+
+        // Remove any key that is still undefined just to be 100% safe
+        Object.keys(bookingPayload).forEach(key => bookingPayload[key] === undefined && delete bookingPayload[key]);
+
+        await db.collection('appointments').add(bookingPayload);
+
         showToast(`Slot Booked! Your Token is ${correctToken}`);
+
     } catch (e) {
         console.error("Firebase Booking Error:", e);
-        showToast("Booking Failed - Check Console");
+        showToast("Booking Error. Please contact Admin.");
     } finally {
         btn.textContent = originalText;
         btn.disabled = false;
@@ -3112,6 +3208,71 @@ function closeBroadcastRecallModal() {
     if (modal) modal.classList.add('hidden');
 }
 
+// --- STUDENT DASHBOARD UPDATE LOGIC (UNLOCKED) ---
+function openUpdateModal() {
+    const modal = document.getElementById('studentUpdateModal');
+    if (!modal) return;
+
+    // Auto-fill their current ID so they can easily edit it
+    const input = document.getElementById('studentNewMahadbtInput');
+    if (input && currentUser) {
+        input.value = currentUser.mahadbtId || "";
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeUpdateModal() {
+    const modal = document.getElementById('studentUpdateModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function saveStudentUpdate() {
+    const input = document.getElementById('studentNewMahadbtInput');
+    if (!input) return;
+
+    const newId = input.value.trim().toUpperCase();
+    if (!newId) return showToast("Please enter a valid MahaDBT ID");
+
+    const btn = document.getElementById('saveStudentUpdateBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Saving...";
+    btn.disabled = true;
+
+    try {
+        // 1. Update the Student's User Profile
+        await db.collection('users').doc(currentUser.uid).update({
+            mahadbtId: newId,
+            mahadbtYear: "2025-2026" // Defaulting to current cycle
+        });
+
+        // 2. Update the Admin's Master Roster instantly
+        if (currentUser.prn) {
+            await db.collection('master_students').doc(currentUser.prn).update({
+                mahadbtId: newId,
+                mahadbtYear: "2025-2026"
+            });
+        }
+
+        // Update local state so it reflects instantly without a hard refresh
+        currentUser.mahadbtId = newId;
+        currentUser.mahadbtYear = "2025-2026";
+
+        showToast("MahaDBT ID Updated Successfully!");
+        closeUpdateModal();
+
+        // Refresh the UI to show the new ID
+        showStudentDashboard();
+
+    } catch (e) {
+        console.error(e);
+        showToast("Error updating ID.");
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
 
 
 
@@ -3137,53 +3298,16 @@ window.closeAddStudentModal = closeAddStudentModal;
 window.submitSingleStudent = submitSingleStudent;
 window.enableAdminEditMode = enableAdminEditMode;
 
-window.toggleEditProfile = () => {
-    const modal = document.getElementById('updateProfileModal');
-    const inputArea = document.getElementById('editMahadbtInputArea');
-    const lockedArea = document.getElementById('editMahadbtLockedArea');
-    const saveBtn = document.getElementById('saveProfileBtn');
-    const input = document.getElementById('editMahadbtId');
+window.openUpdateModal = openUpdateModal;
+window.closeUpdateModal = closeUpdateModal;
+window.saveStudentUpdate = saveStudentUpdate;
 
-    if (window.isMahadbtWindowOpen) {
-        inputArea.classList.remove('hidden');
-        lockedArea.classList.add('hidden');
-        saveBtn.classList.remove('hidden');
-        input.value = currentUser.mahadbtId || "";
-    } else {
-        inputArea.classList.add('hidden');
-        lockedArea.classList.remove('hidden');
-        saveBtn.classList.add('hidden');
 
-        // Explicitly show the year it belongs to!
-        const displayYear = currentUser.mahadbtYear || window.systemAcademicYear || "2025-2026";
-        document.getElementById('lockedYearDisplay').textContent = displayYear;
-    }
 
-    modal.classList.remove('hidden');
-};
-
-window.saveProfileUpdate = async () => {
-    const id = document.getElementById('editMahadbtId').value.trim();
-    if (!id) return showToast("Please enter a valid Application ID");
-
-    await db.collection('users').doc(currentUser.uid).update({
-        mahadbtId: id, mahadbtYear: window.systemAcademicYear
-    });
-    await db.collection('master_students').doc(currentUser.prn).update({
-        mahadbtId: id, mahadbtYear: window.systemAcademicYear
-    });
-
-    currentUser.mahadbtId = id;
-    currentUser.mahadbtYear = window.systemAcademicYear;
-
-    document.getElementById('updateProfileModal').classList.add('hidden');
-    showStudentDashboard();
-    showToast(`MahaDBT ID Updated for ${window.systemAcademicYear}`);
-};
 
 
 window.toggleLiveQueue = () => document.getElementById('liveQueueSection').classList.toggle('hidden');
-window.closeUpdateModal = () => document.getElementById('updateProfileModal').classList.add('hidden');
+
 window.updateActiveStatus = updateActiveStatus;
 window.manualStartTimer = manualStartTimer;
 window.applyFilters = applyFilters;
@@ -3217,6 +3341,11 @@ window.promptRecallBroadcast = promptRecallBroadcast;
 window.closeBroadcastRecallModal = closeBroadcastRecallModal;
 window.executeBroadcastRecall = executeBroadcastRecall;
 window.submitAnnouncement = submitAnnouncement;
-window.deleteAnnouncement = deleteAnnouncement;
 
-document.addEventListener('DOMContentLoaded', initApp);
+
+// Bulletproof Initialization Check
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp(); // Fire immediately if the page is already fully loaded
+}

@@ -290,30 +290,31 @@
                 </div>
 
                 <div class="mb-8 animate-slide" style="animation-delay: 0.1s">
-                    <h2 class="text-xl font-bold text-slate-800 mb-4">Verification Timetable</h2>
+                    <h2 class="text-xl font-bold text-white mb-4">Verification Timetable</h2>
                     <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-                        <div class="glass-card rounded-xl p-4 text-center border-t-4 border-emerald-500">
-                            <p class="text-xs text-slate-500 font-bold uppercase">Monday</p>
-                            <p class="font-bold text-slate-800">DS</p>
-                        </div>
                         <div class="glass-card rounded-xl p-4 text-center border-t-4 border-emerald-500">
                             <p class="text-xs text-slate-500 font-bold uppercase">Tuesday</p>
                             <p class="font-bold text-slate-800">AIML</p>
                         </div>
                         <div class="glass-card rounded-xl p-4 text-center border-t-4 border-emerald-500">
                             <p class="text-xs text-slate-500 font-bold uppercase">Wednesday</p>
-                            <p class="font-bold text-slate-800">COMP</p>
-                        </div>
-                        <div class="glass-card rounded-xl p-4 text-center border-t-4 border-emerald-500">
-                            <p class="text-xs text-slate-500 font-bold uppercase">Thursday</p>
                             <p class="font-bold text-slate-800">IT</p>
                         </div>
                         <div class="glass-card rounded-xl p-4 text-center border-t-4 border-emerald-500">
+                            <p class="text-xs text-slate-500 font-bold uppercase">Thursday</p>
+                            <p class="font-bold text-slate-800 text-[11px] md:text-xs">MECH/CIVIL/AUTO</p>
+                        </div>
+                        <div class="glass-card rounded-xl p-4 text-center border-t-4 border-emerald-500">
                             <p class="text-xs text-slate-500 font-bold uppercase">Friday</p>
-                            <p class="font-bold text-slate-800 text-xs">MECH/CIVIL/AUTO</p>
+                            <p class="font-bold text-slate-800">DS</p>
+                        </div>
+                        <div class="glass-card rounded-xl p-4 text-center border-t-4 border-emerald-500">
+                            <p class="text-xs text-slate-500 font-bold uppercase">Saturday</p>
+                            <p class="font-bold text-slate-800">COMP</p>
                         </div>
                     </div>
                 </div>
+
 
                 <div id="liveQueueSection" class="hidden mb-8 animate-slide">
                     <div class="glass-card rounded-2xl p-6 shadow-xl relative overflow-hidden">
@@ -467,6 +468,14 @@
                                     d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                             </svg>
                             Announcements
+                        </button>
+                        <button onclick="toggleAdminView('tomorrow')" id="btnViewTomorrow"
+                            class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Tomorrow's Roster
                         </button>
 
                         <div class="text-right border-l border-slate-700 pl-4 ml-2">
@@ -871,8 +880,8 @@
                                         <th class="px-4 py-3">PRN</th>
                                         <th class="px-4 py-3">Dept & Year</th>
                                         <th class="px-4 py-3">Contact No.</th>
-                                        <th class="px-4 py-3">Status</th>
-                                        <th class="px-4 py-3">Status Details & Next Steps</th>
+                                        <th class="px-4 py-3 min-w-[130px]">Status</th>
+                                        <th class="px-4 py-3 w-auto">Status Details & Next Steps</th>
                                     </tr>
                                 </thead>
                                 <tbody id="statsTableBody" class="divide-y divide-slate-100 bg-white text-sm">
@@ -955,6 +964,52 @@
                             <tbody id="directoryTableBody" class="divide-y divide-slate-100 bg-white text-sm">
                                 <tr>
                                     <td colspan="3" class="text-center py-10 text-slate-400">Loading directory...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div id="adminTomorrowView" class="max-w-7xl mx-auto px-6 py-8 hidden">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Tomorrow's Roster</h2>
+                        <p id="tomorrowDateDisplay" class="text-slate-400 text-sm mt-1">Loading date...</p>
+                    </div>
+                    <div class="flex gap-4 items-center flex-wrap">
+                        <div
+                            class="bg-violet-500/20 border border-violet-500/30 px-4 py-2 rounded-lg flex items-center shadow-inner">
+                            <span class="text-violet-200 text-xs font-bold uppercase tracking-wider">Total
+                                Expected:</span>
+                            <span id="tomorrowTotalExpected"
+                                class="text-2xl font-black text-white ml-3 drop-shadow-md">0</span>
+                        </div>
+                        <button onclick="toggleAdminView('live')"
+                            class="px-4 py-2.5 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-700 transition-all flex items-center gap-2 shadow-md">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg> Back to Queue
+                        </button>
+                    </div>
+                </div>
+
+                <div class="glass-card rounded-2xl overflow-hidden shadow-xl border-t-4 border-violet-500">
+                    <div class="overflow-x-auto max-h-[700px]">
+                        <table class="w-full relative">
+                            <thead
+                                class="bg-slate-100 text-left text-xs uppercase font-bold text-slate-500 sticky top-0 z-10 shadow-sm border-b border-slate-200">
+                                <tr class="divide-x divide-slate-200">
+                                    <th class="px-6 py-4 w-32 bg-slate-100">Time & Token</th>
+                                    <th class="px-6 py-4 bg-slate-100">Student Identity</th>
+                                    <th class="px-6 py-4 bg-slate-100">Preparation Info</th>
+                                    <th class="px-6 py-4 w-32 text-center bg-slate-100">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tomorrowTableBody" class="divide-y divide-slate-100 bg-white text-sm">
+                                <tr>
+                                    <td colspan="4" class="text-center py-12 text-slate-400 font-medium italic">Loading
+                                        tomorrow's schedule...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1085,6 +1140,7 @@
             </div>
         </div>
 
+
         <div id="toast"
             class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-[100]">
             <div class="bg-slate-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3">
@@ -1101,7 +1157,8 @@
                     <button onclick="closeUpdateModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12"></path>
+                                d="M6 18L18 6M6 6l12 12">
+                            </path>
                         </svg>
                     </button>
                 </div>
@@ -1121,7 +1178,8 @@
                             class="flex-1 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl shadow-md transition-all flex justify-center items-center gap-2">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
+                                    d="M5 13l4 4L19 7">
+                                </path>
                             </svg>
                             Save ID
                         </button>

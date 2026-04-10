@@ -82,13 +82,13 @@ const yearLabels = {
 };
 
 const deptToDay = {
-    'DS': { day: 1, name: 'Monday' },
     'AIML': { day: 2, name: 'Tuesday' },
-    'COMP': { day: 3, name: 'Wednesday' },
-    'IT': { day: 4, name: 'Thursday' }, // Fixed: Moved from Friday to Thursday
-    'MECH': { day: 6, name: 'Saturday' }, // Fixed: Moved from Saturday to Friday
-    'CIVIL': { day: 6, name: 'Saturday' }, // Fixed: Moved from Saturday to Friday
-    'AUTOMOBILE': { day: 6, name: 'Saturday' } // Fixed: Moved from Saturday to Friday
+    'IT': { day: 3, name: 'Wednesday' },
+    'MECH': { day: 4, name: 'Thursday' },
+    'CIVIL': { day: 4, name: 'Thursday' },
+    'AUTOMOBILE': { day: 4, name: 'Thursday' },
+    'DS': { day: 5, name: 'Friday' },
+    'COMP': { day: 6, name: 'Saturday' }
 };
 
 // ==================== HELPER FUNCTIONS ====================
@@ -644,7 +644,13 @@ async function handleAuth(event) {
         } else {
             // Admin Login
             if (rawInput.toLowerCase() === "admin@scholarswift.com" && password === "admin123") {
-                currentUser = { name: 'System Admin', type: 'admin', uid: 'admin_fixed' };
+                currentUser = {
+                    name: 'System Admin',
+                    role: 'Head',
+                    department: 'Verification Cell',
+                    type: 'admin',
+                    uid: 'admin_fixed'
+                };
                 showAdminDashboard();
             } else throw new Error("Invalid Admin credentials.");
         }
@@ -1174,13 +1180,15 @@ function toggleAdminView(view) {
     const liveView = document.getElementById('adminLiveQueueView');
     const statsView = document.getElementById('adminStatsView');
     const dirView = document.getElementById('adminDirectoryView');
-    const annView = document.getElementById('adminAnnouncementsView'); // FIX: Added this reference
+    const annView = document.getElementById('adminAnnouncementsView');
+    const tomorrowView = document.getElementById('adminTomorrowView'); // NEW
 
     // Hide everything first
     if (liveView) liveView.classList.add('hidden');
     if (statsView) statsView.classList.add('hidden');
     if (dirView) dirView.classList.add('hidden');
     if (annView) annView.classList.add('hidden');
+    if (tomorrowView) tomorrowView.classList.add('hidden'); // NEW
 
     // Show the requested view
     if (view === 'stats') {
@@ -1191,7 +1199,10 @@ function toggleAdminView(view) {
         loadStudentDirectory();
     } else if (view === 'announcements') {
         if (annView) annView.classList.remove('hidden');
-        loadAdminAnnouncements(); // FIX: Trigger the announcement log to load!
+        loadAdminAnnouncements();
+    } else if (view === 'tomorrow') {
+        if (tomorrowView) tomorrowView.classList.remove('hidden');
+        loadTomorrowsQueue(); // NEW: Trigger the data load
     } else {
         if (liveView) liveView.classList.remove('hidden');
     }
@@ -2682,7 +2693,7 @@ function applyFilters() {
                     ${phoneHtml}
                 </td>
                 <td class="px-4 py-3">
-                    <span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${badgeStyle}">${label}</span>
+                    <span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider whitespace-nowrap ${badgeStyle}">${label}</span>
                 </td>
                 <td class="px-4 py-3 text-xs font-medium text-slate-500">${statusDetails}</td>
             </tr>
@@ -3271,6 +3282,95 @@ async function saveStudentUpdate() {
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
+}
+
+
+let tomorrowQueueListener = null;
+
+function loadTomorrowsQueue() {
+    if (tomorrowQueueListener) tomorrowQueueListener();
+
+    // 1. Calculate strictly "Tomorrow's" Date
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const yyyy = tomorrow.getFullYear();
+    const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const dd = String(tomorrow.getDate()).padStart(2, '0');
+    const tomorrowStr = `${yyyy}-${mm}-${dd}`;
+
+    // 2. Update UI Header
+    const displayDate = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const dateHeader = document.getElementById('tomorrowDateDisplay');
+    if (dateHeader) {
+        // Also figure out whose day it is tomorrow
+        const tomorrowDayNum = tomorrow.getDay();
+        let targetDept = "OPEN DAY";
+        for (const [dept, info] of Object.entries(deptToDay)) {
+            if (info.day === tomorrowDayNum) targetDept = dept;
+        }
+        dateHeader.innerHTML = `Schedule for <span class="text-violet-300 font-bold">${displayDate}</span> | Target Dept: <span class="text-white font-bold">${targetDept}</span>`;
+    }
+
+    // 3. Listen to Firebase for Tomorrow's bookings
+    tomorrowQueueListener = db.collection('appointments')
+        .where('date', '==', tomorrowStr)
+        .where('status', 'in', ['waiting']) // Only grab valid upcoming slots
+        .onSnapshot(snap => {
+            const tbody = document.getElementById('tomorrowTableBody');
+            const countEl = document.getElementById('tomorrowTotalExpected');
+            if (!tbody) return;
+
+            let list = [];
+            snap.forEach(doc => list.push(doc.data()));
+
+            // Sort chronologically
+            list.sort((a, b) => parseTime(a.time) - parseTime(b.time));
+
+            // Update Counter
+            if (countEl) countEl.textContent = list.length;
+
+            tbody.innerHTML = '';
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-16 text-slate-500 font-medium italic bg-slate-50 border-b border-slate-200">No slots booked for tomorrow yet.<br><span class="text-xs text-slate-400 block mt-2">Slots open exactly 24 hours prior.</span></td></tr>`;
+                return;
+            }
+
+            // Build Read-Only Rows
+            list.forEach(data => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4 align-top">
+                            <p class="font-bold text-slate-800 text-lg">${data.time}</p>
+                            <p class="text-[11px] font-black text-violet-600 uppercase tracking-widest mt-1 bg-violet-50 w-fit px-2 py-0.5 rounded shadow-sm border border-violet-100">Token ${data.token}</p>
+                        </td>
+                        <td class="px-6 py-4">
+                            <p class="font-bold text-slate-800 text-base">${data.name}</p>
+                            <p class="text-xs text-slate-500 font-mono font-bold mt-0.5 mb-1">${data.prn}</p>
+                            <div class="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-2">
+                                <span class="text-slate-600">${data.department || '--'}</span> • <span>${yearLabels[data.currentYear] || data.currentYear || '--'}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 align-top">
+                            <div class="flex flex-col gap-2">
+                                <span class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-black uppercase tracking-wider w-fit border border-slate-200">
+                                    Cat: <span class="text-violet-600">${data.scholarshipType}</span>
+                                </span>
+                                <span class="text-xs font-mono font-bold ${data.mahadbtId ? 'text-emerald-600' : 'text-amber-500'}">
+                                    MahaDBT: ${data.mahadbtId || 'Pending Profile Update'}
+                                </span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-center align-top">
+                            <span class="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 border border-blue-100 shadow-sm whitespace-nowrap block mt-1">
+                                Upcoming
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            });
+        });
 }
 
 
